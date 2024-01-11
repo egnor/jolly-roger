@@ -43,6 +43,9 @@ import "../imports/server/users";
 import "../imports/server/mediasoup";
 import "../imports/server/mediasoup-api";
 
+// TEAM LEFT OUT HACK to add unauthenticated REST API
+import "./add_puzzle_api_handler";
+
 // Imports are necessary to make sure the modules are in the bundle
 import ModelsFacade from "../imports/lib/models/facade";
 
