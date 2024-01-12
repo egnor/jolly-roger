@@ -61,3 +61,17 @@ WebApp.connectHandlers.use("/apiCreatePuzzle94549", (req, res, next) => {
     next();
   }
 });
+
+WebApp.connectHandlers.use("/getAllPuzzleURLs", (req, res, next) => {
+  const urlObject = new URL(req.url || "", `http://${req.headers.host}`);
+  const queryParams = urlObject.searchParams;
+  const huntId = queryParams.get("huntId") || "";
+
+  res.writeHead(200);
+  Puzzles.find({ hunt: huntId }).forEach((puzzle) => {
+    if (puzzle.url) {
+      res.write(puzzle.url + "\n");
+    }
+  });
+  res.end();
+});
