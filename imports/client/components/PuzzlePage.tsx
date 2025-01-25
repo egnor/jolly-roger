@@ -76,6 +76,7 @@ import listDocumentSheets from "../../methods/listDocumentSheets";
 import removePuzzleAnswer from "../../methods/removePuzzleAnswer";
 import removePuzzleTag from "../../methods/removePuzzleTag";
 import sendChatMessage from "../../methods/sendChatMessage";
+import sendPuzzleHeartbeat from "../../methods/sendPuzzleHeartbeat";
 import undestroyPuzzle from "../../methods/undestroyPuzzle";
 import updatePuzzle from "../../methods/updatePuzzle";
 import GoogleScriptInfo from "../GoogleScriptInfo";
@@ -1988,6 +1989,16 @@ const PuzzlePage = React.memo(() => {
       ensurePuzzleDocument.call({ puzzleId: activePuzzle._id });
     }
   }, [activePuzzle]);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      if (globalThis.document?.visibilityState === "visible") {
+        sendPuzzleHeartbeat.call({ puzzleId });
+      }
+    }, 5 * 60 * 1000); // Send heartbeat every 5 minutes
+
+    return () => clearInterval(intervalId); // Cleanup interval on unmount
+  }, [puzzleId]);
 
   trace("PuzzlePage render", { puzzleDataLoading, chatDataLoading });
 
