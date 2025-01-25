@@ -13,15 +13,14 @@ import puzzleActivityForHunt from "../../lib/publications/puzzleActivityForHunt"
 import roundedTime from "../../lib/roundedTime";
 import CallActivities from "../models/CallActivities";
 import definePublication from "./definePublication";
+import HeartbeatActivities from "../../lib/models/HeartbeatActivities"; // Import HeartbeatActivities
 
 class ActivityBucket {
   callUsers: Set<string> = new Set();
-
   chatUsers: Set<string> = new Set();
-
   allUsers: Set<string> = new Set();
-
   documentUsers: Set<string> = new Set();
+  heartbeatUsers: Set<string> = new Set(); // Add heartbeatUsers
 }
 
 type ActivityBuckets = Map<number, ActivityBucket>;
@@ -38,6 +37,8 @@ class HuntActivityAggregator {
   callActivityHandle: Meteor.LiveQueryHandle;
 
   chatMessageHandle: Meteor.LiveQueryHandle;
+
+  heartbeatActivityHandle: Meteor.LiveQueryHandle; // Add heartbeatActivityHandle
 
   timeouts: Map<string, number> = new Map();
 
@@ -111,6 +112,27 @@ class HuntActivityAggregator {
         }
       },
     });
+
+    this.heartbeatActivityHandle = HeartbeatActivities.find({ // Observe HeartbeatActivities
+      hunt,
+    }).observeChanges({
+      added: (_, fields) => {
+        const { puzzle, ts, user } = fields;
+        if (!puzzle || !ts || !user) return;
+
+        const rounded_ts = roundedTime(ACTIVITY_GRANULARITY, ts); // Round the timestamp
+        const [bucket, newBucket] = this.lookupBucket(puzzle, rounded_ts);
+        if (!bucket) return;
+
+        bucket.heartbeatUsers.add(user); // Add user to heartbeatUsers set
+        bucket.allUsers.add(user);
+        if (!initializing) {
+          this.publishBucket(puzzle, rounded_ts, bucket, newBucket);
+        }
+      },
+    });
+
+
     initializing = false;
   }
 
@@ -132,6 +154,7 @@ class HuntActivityAggregator {
       chatUsers: bucket.chatUsers.size,
       callUsers: bucket.callUsers.size,
       documentUsers: bucket.documentUsers.size,
+      heartbeatUsers: bucket.heartbeatUsers.size, // Include heartbeatUsers
     };
   }
 
@@ -153,6 +176,7 @@ class HuntActivityAggregator {
     this.documentActivityHandle.stop();
     this.callActivityHandle.stop();
     this.chatMessageHandle.stop();
+    this.heartbeatActivityHandle.stop(); // Stop heartbeatActivityHandle
     this.timeouts.forEach((timeout) => Meteor.clearTimeout(timeout));
     this.timeouts.clear();
   }

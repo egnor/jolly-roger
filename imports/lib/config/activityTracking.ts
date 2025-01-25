@@ -20,6 +20,7 @@ export type PublishedBucket = {
   chatUsers: number;
   callUsers: number;
   documentUsers: number;
+  heartbeatUsers: number;
 };
 
 export const ACTIVITY_COLLECTION = "puzzle_activities";

@@ -76,6 +76,7 @@ import listDocumentSheets from "../../methods/listDocumentSheets";
 import removePuzzleAnswer from "../../methods/removePuzzleAnswer";
 import removePuzzleTag from "../../methods/removePuzzleTag";
 import sendChatMessage from "../../methods/sendChatMessage";
+import sendPuzzleHeartbeat from "../../methods/sendPuzzleHeartbeat";
 import undestroyPuzzle from "../../methods/undestroyPuzzle";
 import updatePuzzle from "../../methods/updatePuzzle";
 import GoogleScriptInfo from "../GoogleScriptInfo";
@@ -119,6 +120,7 @@ import {
   SolvedPuzzleBackgroundColor,
 } from "./styling/constants";
 import { mediaBreakpointDown } from "./styling/responsive";
+import { ACTIVITY_GRANULARITY } from "../../lib/config/activityTracking";
 
 // Shows a state dump as an in-page overlay when enabled.
 const DEBUG_SHOW_CALL_STATE = false;
@@ -1988,6 +1990,20 @@ const PuzzlePage = React.memo(() => {
       ensurePuzzleDocument.call({ puzzleId: activePuzzle._id });
     }
   }, [activePuzzle]);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      if (globalThis.document?.visibilityState === "visible") {
+        sendPuzzleHeartbeat.call({ puzzleId });
+      }
+    }, ACTIVITY_GRANULARITY ); 
+
+    return () => clearInterval(intervalId); // Cleanup interval on unmount
+  }, [puzzleId]);
+
+  useEffect(() => {
+    sendPuzzleHeartbeat.call({ puzzleId });
+  }, [puzzleId]);
 
   trace("PuzzlePage render", { puzzleDataLoading, chatDataLoading });
 
