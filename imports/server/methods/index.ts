@@ -55,6 +55,7 @@ import "./removePuzzleTag";
 import "./renameTag";
 import "./rollAPIKey";
 import "./sendChatMessage";
+import "./sendPuzzleHeartbeat";
 import "./setFeatureFlag";
 import "./setGuessState";
 import "./syncHuntDiscordRole";

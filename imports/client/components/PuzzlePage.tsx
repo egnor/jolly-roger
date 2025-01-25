@@ -120,6 +120,7 @@ import {
   SolvedPuzzleBackgroundColor,
 } from "./styling/constants";
 import { mediaBreakpointDown } from "./styling/responsive";
+import { ACTIVITY_GRANULARITY } from "../../lib/config/activityTracking";
 
 // Shows a state dump as an in-page overlay when enabled.
 const DEBUG_SHOW_CALL_STATE = false;
@@ -1995,9 +1996,13 @@ const PuzzlePage = React.memo(() => {
       if (globalThis.document?.visibilityState === "visible") {
         sendPuzzleHeartbeat.call({ puzzleId });
       }
-    }, 5 * 60 * 1000); // Send heartbeat every 5 minutes
+    }, ACTIVITY_GRANULARITY ); 
 
     return () => clearInterval(intervalId); // Cleanup interval on unmount
+  }, [puzzleId]);
+
+  useEffect(() => {
+    sendPuzzleHeartbeat.call({ puzzleId });
   }, [puzzleId]);
 
   trace("PuzzlePage render", { puzzleDataLoading, chatDataLoading });

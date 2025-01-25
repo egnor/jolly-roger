@@ -21,6 +21,7 @@ import roundedTime from "../../lib/roundedTime";
 import ActivityBuckets from "../ActivityBuckets";
 import RelativeTime from "./RelativeTime";
 import { mediaBreakpointDown } from "./styling/responsive";
+import { faEye } from "@fortawesome/free-solid-svg-icons";
 
 const PuzzleActivityItems = styled.span`
   font-size: 14px;
@@ -108,7 +109,7 @@ const PuzzleActivity = ({
     return () => Meteor.clearTimeout(timer);
   }, [finalBucket]);
 
-  const { totals, chats, calls, documents, maxTotalCount } = useTracker(() => {
+  const { totals, chats, calls, documents, viewers, maxTotalCount } = useTracker(() => {
     // Build an array starting from now - ACTIVITY_GRANULARITY * ACTIVITY_BUCKETS to now
     // with ACTIVITY_GRANULARITY intervals.
     const counts = {
@@ -116,6 +117,7 @@ const PuzzleActivity = ({
       chats: [] as number[],
       calls: [] as number[],
       documents: [] as number[],
+      viewers: [] as number[],
       maxTotalCount: 0,
     };
 
@@ -142,6 +144,7 @@ const PuzzleActivity = ({
       counts.chats.unshift(bucket?.chatUsers ?? 0);
       counts.calls.unshift(bucket?.callUsers ?? 0);
       counts.documents.unshift(bucket?.documentUsers ?? 0);
+      counts.viewers.unshift(bucket?.heartbeatUsers ?? 0);
     }
 
     // For the displayed value in the last bucket, use the larger of the last or
@@ -164,6 +167,10 @@ const PuzzleActivity = ({
       counts.documents[counts.documents.length - 1] ?? 0,
       counts.documents[counts.documents.length - 2] ?? 0,
     );
+  counts.viewers[counts.viewers.length - 1] = Math.max(
+    counts.viewers[counts.viewers.length - 1] ?? 0,
+    counts.viewers[counts.viewers.length - 2] ?? 0,
+  );
 
     return counts;
   }, [finalBucket, huntId, puzzleId]);
@@ -231,6 +238,19 @@ const PuzzleActivity = ({
           </Sparklines>
         </div>
         <div>{displayNumber(documents)}</div>
+        <div>
+          <FontAwesomeIcon icon={faEye} fixedWidth />
+        </div>
+        <div>Viewers</div>
+        <div>
+          <Sparklines data={viewers} min={0} max={Math.max(1, ...viewers)}>
+            <SparklinesLine color="white" />
+            <SparklinesSpots
+              spotColors={{ "-1": "white", 0: "white", 1: "white" }}
+            />
+          </Sparklines>
+        </div>
+        <div>{displayNumber(viewers)}</div>
       </PuzzleActivityDetail>
     </Tooltip>
   );
