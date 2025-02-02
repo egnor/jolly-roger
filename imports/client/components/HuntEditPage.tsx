@@ -624,6 +624,7 @@ const HuntEditPage = () => {
             />
             <FormText>
               If provided, displays events from this calendar on the hunt page.
+              Of the form 123...def@group.calendar.google.com 
             </FormText>
           </Col>
         </FormGroup>
