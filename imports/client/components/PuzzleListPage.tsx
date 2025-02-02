@@ -59,7 +59,7 @@ import { mediaBreakpointDown } from "./styling/responsive";
 
 const ViewControls = styled.div<{ $canAdd?: boolean }>`
   display: grid;
-  grid-template-columns: auto auto auto 1fr auto;
+  grid-template-columns: auto auto auto 1fr;
   align-items: end;
   gap: 1em;
   margin-bottom: 1em;
@@ -558,7 +558,8 @@ const PuzzleListView = ({
 
   return (
     <div>
-      <ViewControls $canAdd={canAdd}>
+      <div style={{ display: 'flex', gap: '1em', marginBottom: '1em' }}>
+        <ViewControls $canAdd={canAdd} style={{ flex: '1 1 auto' }}>
           <FormGroup>
             <FormLabel>Organize by</FormLabel>
             <ButtonToolbar>
@@ -614,11 +615,6 @@ const PuzzleListView = ({
             </ButtonToolbar>
           </FormGroup>
           {addPuzzleContent}
-          {hunt && hunt.googleCalendarID && (
-            <FormGroup>
-              <GoogleCalEmbed src={hunt.googleCalendarID} />
-            </FormGroup>
-          )}
           <SearchFormGroup $canAdd={canAdd}>
             <SearchFormLabel $canAdd={canAdd}>Search</SearchFormLabel>
             <InputGroup>
@@ -636,7 +632,13 @@ const PuzzleListView = ({
               </Button>
             </InputGroup>
           </SearchFormGroup>
-      </ViewControls>
+        </ViewControls>
+        {hunt && hunt.googleCalendarID && (
+          <div style={{ flex: '0 0 auto' }}>
+            <GoogleCalEmbed src={hunt.googleCalendarID} />
+          </div>
+        )}
+      </div>
       {renderList(retainedPuzzles, solvedOverConstrains, allPuzzles.length)}
     </div>
   );
