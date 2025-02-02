@@ -250,6 +250,7 @@ const HuntEditPage = () => {
   const [memberDiscordRole, setMemberDiscordRole] = useState<
     SavedDiscordObjectType | undefined
   >(hunt?.memberDiscordRole);
+  const [googleCalendarID, setGoogleCalendarID] = useState<string>(hunt?.googleCalendarID ?? "");
 
   const onNameChanged = useCallback<NonNullable<FormControlProps["onChange"]>>(
     (e) => {
@@ -322,6 +323,12 @@ const HuntEditPage = () => {
     },
     [],
   );
+  
+  const onGoogleCalendarIDChanged = useCallback<
+    NonNullable<FormControlProps["onChange"]>
+  >((e) => {
+    setGoogleCalendarID(e.currentTarget.value);
+  }, []);
 
   const onFormCallback = useCallback(
     (error?: Error, newHuntId?: string) => {
@@ -363,6 +370,7 @@ const HuntEditPage = () => {
         puzzleHooksDiscordChannel,
         firehoseDiscordChannel,
         memberDiscordRole,
+        googleCalendarID: googleCalendarID === "" ? undefined : googleCalendarID,
       };
 
       if (huntId) {
@@ -385,6 +393,7 @@ const HuntEditPage = () => {
       firehoseDiscordChannel,
       memberDiscordRole,
       onFormCallback,
+      googleCalendarID,
     ],
   );
 
@@ -597,6 +606,24 @@ const HuntEditPage = () => {
             <FormText>
               Users joining this hunt will be automatically added to all of
               these (comma-separated) lists
+            </FormText>
+          </Col>
+        </FormGroup>
+        
+        <FormGroup as={Row} className="mb-3">
+          <FormLabel column xs={3} htmlFor="hunt-form-google-calendar-id">
+            Google Calendar ID
+          </FormLabel>
+          <Col xs={9}>
+            <FormControl
+              id="hunt-form-google-calendar-id"
+              type="text"
+              value={googleCalendarID}
+              onChange={onGoogleCalendarIDChanged}
+              disabled={disableForm}
+            />
+            <FormText>
+              If provided, displays events from this calendar on the hunt page.
             </FormText>
           </Col>
         </FormGroup>
