@@ -57,6 +57,16 @@ import RelatedPuzzleGroup, { PuzzleGroupDiv } from "./RelatedPuzzleGroup";
 import RelatedPuzzleList from "./RelatedPuzzleList";
 import { mediaBreakpointDown } from "./styling/responsive";
 
+const HeaderGroup = styled.div<{}> `
+  display: flex;
+  gap: 1em;
+  margin-bottom: 1em;
+  ${mediaBreakpointDown(
+    "sm",
+    css`display: block;`,
+  )}
+ `;
+
 const ViewControls = styled.div<{ $canAdd?: boolean }>`
   display: grid;
   grid-template-columns: auto auto auto 1fr;
@@ -558,7 +568,7 @@ const PuzzleListView = ({
 
   return (
     <div>
-      <div style={{ display: 'flex', gap: '1em', marginBottom: '1em' }}>
+      <HeaderGroup>
         <ViewControls $canAdd={canAdd} style={{ flex: '1 1 auto' }}>
           <FormGroup>
             <FormLabel>Organize by</FormLabel>
@@ -638,7 +648,7 @@ const PuzzleListView = ({
             <GoogleCalEmbed src={hunt.googleCalendarID} />
           </div>
         )}
-      </div>
+      </HeaderGroup>
       {renderList(retainedPuzzles, solvedOverConstrains, allPuzzles.length)}
     </div>
   );
