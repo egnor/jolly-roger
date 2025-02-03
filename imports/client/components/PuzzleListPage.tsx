@@ -24,6 +24,7 @@ import ToggleButtonGroup from "react-bootstrap/ToggleButtonGroup";
 import { useParams, useSearchParams } from "react-router-dom";
 import styled, { css } from "styled-components";
 import { sortedBy } from "../../lib/listUtils";
+import GoogleCalEmbed from "./GoogleCalEmbed";
 import Bookmarks from "../../lib/models/Bookmarks";
 import Hunts from "../../lib/models/Hunts";
 import Puzzles from "../../lib/models/Puzzles";
@@ -55,6 +56,16 @@ import PuzzleModalForm from "./PuzzleModalForm";
 import RelatedPuzzleGroup, { PuzzleGroupDiv } from "./RelatedPuzzleGroup";
 import RelatedPuzzleList from "./RelatedPuzzleList";
 import { mediaBreakpointDown } from "./styling/responsive";
+
+const HeaderGroup = styled.div<{}> `
+  display: flex;
+  gap: 1em;
+  margin-bottom: 1em;
+  ${mediaBreakpointDown(
+    "sm",
+    css`display: block;`,
+  )}
+ `;
 
 const ViewControls = styled.div<{ $canAdd?: boolean }>`
   display: grid;
@@ -169,6 +180,7 @@ const PuzzleListView = ({
   canUpdate: boolean;
   loading: boolean;
 }) => {
+  const hunt = useTracker(() => Hunts.findOne(huntId), [huntId]);
   const allPuzzles = useTracker(
     () => Puzzles.find({ hunt: huntId }).fetch(),
     [huntId],
@@ -556,80 +568,87 @@ const PuzzleListView = ({
 
   return (
     <div>
-      <ViewControls $canAdd={canAdd}>
-        <FormGroup>
-          <FormLabel>Organize by</FormLabel>
-          <ButtonToolbar>
-            <StyledToggleButtonGroup
-              type="radio"
-              name="puzzle-view"
-              defaultValue="group"
-              value={displayMode}
-              onChange={setDisplayMode}
-            >
-              <ToggleButton
-                id="view-group-button"
-                variant="outline-info"
-                value="group"
+      <HeaderGroup>
+        <ViewControls $canAdd={canAdd} style={{ flex: '1 1 auto' }}>
+          <FormGroup>
+            <FormLabel>Organize by</FormLabel>
+            <ButtonToolbar>
+              <StyledToggleButtonGroup
+                type="radio"
+                name="puzzle-view"
+                defaultValue="group"
+                value={displayMode}
+                onChange={setDisplayMode}
               >
-                Group
-              </ToggleButton>
-              <ToggleButton
-                id="view-unlock-button"
-                variant="outline-info"
-                value="unlock"
+                <ToggleButton
+                  id="view-group-button"
+                  variant="outline-info"
+                  value="group"
+                >
+                  Group
+                </ToggleButton>
+                <ToggleButton
+                  id="view-unlock-button"
+                  variant="outline-info"
+                  value="unlock"
+                >
+                  Unlock
+                </ToggleButton>
+              </StyledToggleButtonGroup>
+            </ButtonToolbar>
+          </FormGroup>
+          <FormGroup>
+            <FormLabel>Solved puzzles</FormLabel>
+            <ButtonToolbar>
+              <StyledToggleButtonGroup
+                type="radio"
+                name="show-solved"
+                defaultValue="show"
+                value={showSolved ? "show" : "hide"}
+                onChange={setShowSolvedString}
               >
-                Unlock
-              </ToggleButton>
-            </StyledToggleButtonGroup>
-          </ButtonToolbar>
-        </FormGroup>
-        <FormGroup>
-          <FormLabel>Solved puzzles</FormLabel>
-          <ButtonToolbar>
-            <StyledToggleButtonGroup
-              type="radio"
-              name="show-solved"
-              defaultValue="show"
-              value={showSolved ? "show" : "hide"}
-              onChange={setShowSolvedString}
-            >
-              <ToggleButton
-                id="solved-hide-button"
-                variant="outline-info"
-                value="hide"
-              >
-                Hidden
-              </ToggleButton>
-              <ToggleButton
-                id="solved-show-button"
-                variant="outline-info"
-                value="show"
-              >
-                Shown
-              </ToggleButton>
-            </StyledToggleButtonGroup>
-          </ButtonToolbar>
-        </FormGroup>
-        {addPuzzleContent}
-        <SearchFormGroup $canAdd={canAdd}>
-          <SearchFormLabel $canAdd={canAdd}>Search</SearchFormLabel>
-          <InputGroup>
-            <FormControl
-              id="jr-puzzle-search"
-              as="input"
-              type="text"
-              ref={searchBarRef}
-              placeholder="Filter by title, answer, or tag"
-              value={searchString}
-              onChange={onSearchStringChange}
-            />
-            <Button variant="secondary" onClick={clearSearch}>
-              <FontAwesomeIcon icon={faEraser} />
-            </Button>
-          </InputGroup>
-        </SearchFormGroup>
-      </ViewControls>
+                <ToggleButton
+                  id="solved-hide-button"
+                  variant="outline-info"
+                  value="hide"
+                >
+                  Hidden
+                </ToggleButton>
+                <ToggleButton
+                  id="solved-show-button"
+                  variant="outline-info"
+                  value="show"
+                >
+                  Shown
+                </ToggleButton>
+              </StyledToggleButtonGroup>
+            </ButtonToolbar>
+          </FormGroup>
+          {addPuzzleContent}
+          <SearchFormGroup $canAdd={canAdd}>
+            <SearchFormLabel $canAdd={canAdd}>Search</SearchFormLabel>
+            <InputGroup>
+              <FormControl
+                id="jr-puzzle-search"
+                as="input"
+                type="text"
+                ref={searchBarRef}
+                placeholder="Filter by title, answer, or tag"
+                value={searchString}
+                onChange={onSearchStringChange}
+              />
+              <Button variant="secondary" onClick={clearSearch}>
+                <FontAwesomeIcon icon={faEraser} />
+              </Button>
+            </InputGroup>
+          </SearchFormGroup>
+        </ViewControls>
+        {hunt && hunt.googleCalendarID && (
+          <div style={{ flex: '0 0 auto' }}>
+            <GoogleCalEmbed src={hunt.googleCalendarID} />
+          </div>
+        )}
+      </HeaderGroup>
       {renderList(retainedPuzzles, solvedOverConstrains, allPuzzles.length)}
     </div>
   );
