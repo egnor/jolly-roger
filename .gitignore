@@ -3,3 +3,4 @@ npm-debug.log
 jsconfig.json
 .vscode/launch.json
 .swc
+.claude/

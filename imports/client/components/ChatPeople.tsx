@@ -4,21 +4,16 @@ import { faCaretDown } from "@fortawesome/free-solid-svg-icons/faCaretDown";
 import { faCaretRight } from "@fortawesome/free-solid-svg-icons/faCaretRight";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import type React from "react";
-import type { ReactNode } from "react";
 import {
   useCallback,
   useEffect,
-  useId,
   useLayoutEffect,
   useRef,
   useState,
 } from "react";
-import OverlayTrigger from "react-bootstrap/OverlayTrigger";
-import Tooltip from "react-bootstrap/Tooltip";
 import styled from "styled-components";
 import Flags from "../../Flags";
 import { RECENT_ACTIVITY_TIME_WINDOW_MS } from "../../lib/config/webrtc";
-import type { DiscordAccountType } from "../../lib/models/DiscordAccount";
 import MeteorUsers from "../../lib/models/MeteorUsers";
 import CallHistories from "../../lib/models/mediasoup/CallHistories";
 import Peers from "../../lib/models/mediasoup/Peers";
@@ -29,7 +24,6 @@ import useSubscribeAvatars from "../hooks/useSubscribeAvatars";
 import { Subscribers } from "../subscribers";
 import { trace } from "../tracing";
 import { PREFERRED_AUDIO_DEVICE_STORAGE_KEY } from "./AudioConfig";
-import Avatar from "./Avatar";
 import CallSection from "./CallSection";
 import { PuzzlePagePadding } from "./styling/constants";
 import {
@@ -37,58 +31,115 @@ import {
   AVButton,
   ChatterSubsection,
   ChatterSubsectionHeader,
-  PeopleItemDiv,
   PeopleListDiv,
 } from "./styling/PeopleComponents";
 
 interface ViewerSubscriber {
   user: string;
   name: string | undefined;
-  discordAccount: DiscordAccountType | undefined;
+  status: "active" | "idle" | "away";
   tab: string | undefined;
 }
 
-interface PersonBoxProps extends ViewerSubscriber {
-  children?: ReactNode;
-  popperBoundaryRef: React.RefObject<HTMLElement | null>;
-}
+const ViewerChipsContainer = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  padding: 0.25rem 0;
+`;
+
+const ViewerChip = styled.span<{ $status: "active" | "idle" | "away" }>`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  max-width: 200px;
+  min-width: 0;
+  background-color: ${(props) => {
+    switch (props.$status) {
+      case "active":
+        return "#d4edda"; // Light green
+      case "idle":
+        return "#fff3cd"; // Light yellow
+      case "away":
+        return "#e2e3e5"; // Light grey
+      default:
+        return "#e2e3e5";
+    }
+  }};
+  color: ${(props) => {
+    switch (props.$status) {
+      case "active":
+        return "#155724"; // Dark green
+      case "idle":
+        return "#856404"; // Dark yellow
+      case "away":
+        return "#383d41"; // Dark grey
+      default:
+        return "#383d41";
+    }
+  }};
+  border: 1px solid
+    ${(props) => {
+      switch (props.$status) {
+        case "active":
+          return "#c3e6cb";
+        case "idle":
+          return "#ffeaa7";
+        case "away":
+          return "#d6d8db";
+        default:
+          return "#d6d8db";
+      }
+    }};
+
+  > * {
+    flex-shrink: 0;
+  }
+`;
+
+const StatusDot = styled.span<{ $status: "active" | "idle" | "away" }>`
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background-color: ${(props) => {
+    switch (props.$status) {
+      case "active":
+        return "#28a745"; // Green
+      case "idle":
+        return "#ffc107"; // Yellow
+      case "away":
+        return "#6c757d"; // Grey
+      default:
+        return "#6c757d";
+    }
+  }};
+`;
+
+const ViewerName = styled.span`
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  max-width: 150px;
+  flex-shrink: 1;
+`;
 
 const ViewerPersonBox = ({
-  user,
+  user: _user,
   name,
-  discordAccount,
-  children,
-  popperBoundaryRef,
-}: PersonBoxProps) => {
-  const id = useId();
-
+  status,
+  tab: _tab,
+}: ViewerSubscriber) => {
   return (
-    <OverlayTrigger
-      placement="bottom"
-      popperConfig={{
-        modifiers: [
-          {
-            name: "preventOverflow",
-            enabled: true,
-            options: {
-              boundary: popperBoundaryRef.current,
-              padding: 0,
-            },
-          },
-        ],
-      }}
-      overlay={<Tooltip id={id}>{name}</Tooltip>}
-    >
-      <PeopleItemDiv>
-        <Avatar
-          _id={user}
-          displayName={name}
-          discordAccount={discordAccount}
-          size={44}
-        />
-        {children}
-      </PeopleItemDiv>
-    </OverlayTrigger>
+    <ViewerChip $status={status}>
+      <StatusDot $status={status} />
+      <ViewerName>{name || "Unknown"}</ViewerName>
+    </ViewerChip>
   );
 };
 
@@ -182,6 +233,7 @@ const ChatPeople = ({
       };
     }
 
+    const now = Date.now();
     let unknownCount = 0;
     const viewersAcc: ViewerSubscriber[] = [];
 
@@ -199,12 +251,13 @@ const ChatPeople = ({
         return;
       }
 
+      // RTC participants are always "active"
       // If the same user is joined twice (from two different tabs), dedupe in
       // the viewer listing. (We include both in rtcParticipants still.)
       rtcViewersAcc.push({
         user: user._id,
         name: user.displayName,
-        discordAccount: user.discordAccount,
+        status: "active",
         tab: p.tab,
       });
       rtcViewerIndex[user._id] = true;
@@ -222,10 +275,21 @@ const ChatPeople = ({
         return;
       }
 
+      // Calculate status based on visibility and last activity
+      const lastSeen = s.updatedAt ? s.updatedAt.getTime() : 0;
+      const timeSinceLastSeen = now - lastSeen;
+      const isActive = s.visible || timeSinceLastSeen < 60000; // < 1 min
+      const isIdle = !isActive && timeSinceLastSeen < 300000; // 1-5 min
+      const status: "active" | "idle" | "away" = isActive
+        ? "active"
+        : isIdle
+          ? "idle"
+          : "away";
+
       viewersAcc.push({
         user: s.user,
         name: user.displayName,
-        discordAccount: user.discordAccount,
+        status,
         tab: undefined,
       });
     });
@@ -364,13 +428,14 @@ const ChatPeople = ({
                 )}
               </PeopleListHeader>
               <PeopleListDiv $collapsed={!callersExpanded}>
-                {rtcViewers.map((viewer) => (
-                  <ViewerPersonBox
-                    key={`person-${viewer.user}-${viewer.tab}`}
-                    popperBoundaryRef={chatterRef}
-                    {...viewer}
-                  />
-                ))}
+                <ViewerChipsContainer>
+                  {rtcViewers.map((viewer) => (
+                    <ViewerPersonBox
+                      key={`person-${viewer.user}-${viewer.tab}`}
+                      {...viewer}
+                    />
+                  ))}
+                </ViewerChipsContainer>
               </PeopleListDiv>
             </ChatterSubsection>
           </>
@@ -408,13 +473,11 @@ const ChatPeople = ({
           {`${totalViewers} viewer${totalViewers !== 1 ? "s" : ""}`}
         </PeopleListHeader>
         <PeopleListDiv $collapsed={!viewersExpanded}>
-          {viewers.map((viewer) => (
-            <ViewerPersonBox
-              key={`person-${viewer.user}`}
-              popperBoundaryRef={chatterRef}
-              {...viewer}
-            />
-          ))}
+          <ViewerChipsContainer>
+            {viewers.map((viewer) => (
+              <ViewerPersonBox key={`person-${viewer.user}`} {...viewer} />
+            ))}
+          </ViewerChipsContainer>
         </PeopleListDiv>
       </ChatterSubsection>
     </ChatterSection>

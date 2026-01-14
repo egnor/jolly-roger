@@ -4,6 +4,9 @@ import styled from "styled-components";
 const SpectrumCanvas = styled.canvas`
   position: absolute;
   inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
 `;
 
 const DEFAULT_THROTTLE_MAX_FPS = 30;

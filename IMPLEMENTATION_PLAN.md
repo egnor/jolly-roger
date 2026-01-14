@@ -359,53 +359,87 @@ const sparklineTooltip = (
 
 ---
 
-## Phase 5: Filter by Viewer
+## Phase 5: Filter by Viewer ✅ **COMPLETE**
 
 ### Goal
 Add UI to filter puzzle list by who's currently viewing/working on them.
 
-### Files to Modify
-- `imports/client/components/PuzzleListPage.tsx` (or wherever filters are)
-- `imports/client/components/PuzzleList.tsx`
+### Files Modified
+- `imports/client/components/PuzzleListPage.tsx` (lines 212, 295-318, 334-374, 679-721)
 
 ### Implementation
 
-**5.1 Add filter state**
+**5.1 Filter state using URL search params ✅**
 
 ```typescript
-// In PuzzleListPage or PuzzleList component
-const [viewerFilter, setViewerFilter] = useState<string | null>(null);
+const viewerFilter = searchParams.get("viewer") ?? "";
+
+const setViewerFilter = useCallback(
+  (val: string) => {
+    const u = new URLSearchParams(searchParams);
+    if (val) {
+      u.set("viewer", val);
+    } else {
+      u.delete("viewer");
+    }
+    setSearchParams(u);
+  },
+  [searchParams, setSearchParams],
+);
 ```
 
-**5.2 Add filter UI dropdown**
+**5.2 Get all unique viewers ✅**
 
 ```typescript
-import Form from "react-bootstrap/Form";
-
-// Get all unique viewers across all puzzles
 const allViewers = useTracker(() => {
-  const viewerSet = new Set<string>();
-  puzzles.forEach((puzzle) => {
+  const viewersMap = new Map<string, { userId: string; displayName: string }>();
+  allPuzzles.forEach((puzzle) => {
     const subscribersTopic = `puzzle:${puzzle._id}`;
-    const subs = Subscribers.find({ name: subscribersTopic }).fetch();
-    subs.forEach((sub) => viewerSet.add(sub.user));
+    const subscribers = Subscribers.find({ name: subscribersTopic }).fetch();
+    subscribers.forEach((sub) => {
+      if (!viewersMap.has(sub.user)) {
+        const user = MeteorUsers.findOne(sub.user);
+        if (user?.displayName) {
+          viewersMap.set(sub.user, {
+            userId: sub.user,
+            displayName: user.displayName,
+          });
+        }
+      }
+    });
   });
+  return Array.from(viewersMap.values()).sort((a, b) =>
+    a.displayName.localeCompare(b.displayName),
+  );
+}, [allPuzzles]);
+```
 
-  return Array.from(viewerSet).map((userId) => {
-    const user = MeteorUsers.findOne(userId);
-    return {
-      userId,
-      displayName: user?.displayName || "Unknown",
-    };
-  }).sort((a, b) => a.displayName.localeCompare(b.displayName));
-}, [puzzles]);
+**5.3 Apply filter to puzzle list ✅**
 
-// Render filter dropdown
-<Form.Group>
-  <Form.Label>Filter by viewer:</Form.Label>
-  <Form.Select
-    value={viewerFilter || ""}
-    onChange={(e) => setViewerFilter(e.target.value || null)}
+```typescript
+const puzzlesMatchingViewerFilter = useCallback(
+  (puzzles: PuzzleType[]): PuzzleType[] => {
+    if (!viewerFilter) {
+      return puzzles;
+    }
+    return puzzles.filter((puzzle) => {
+      const subscribersTopic = `puzzle:${puzzle._id}`;
+      const subscribers = Subscribers.find({ name: subscribersTopic }).fetch();
+      return subscribers.some((sub) => sub.user === viewerFilter);
+    });
+  },
+  [viewerFilter],
+);
+```
+
+**5.4 Filter dropdown UI ✅**
+
+```typescript
+<FormGroup>
+  <FormLabel>Filter by viewer</FormLabel>
+  <FormSelect
+    value={viewerFilter}
+    onChange={(e) => setViewerFilter(e.target.value)}
   >
     <option value="">All puzzles</option>
     {allViewers.map((viewer) => (
@@ -413,48 +447,58 @@ const allViewers = useTracker(() => {
         {viewer.displayName}
       </option>
     ))}
-  </Form.Select>
-</Form.Group>
+  </FormSelect>
+</FormGroup>
 ```
 
-**5.3 Apply filter to puzzle list**
+**5.5 Quick filter chips ✅**
+
+Clickable badge chips for quick filtering (shows first 8 viewers):
 
 ```typescript
-const filteredPuzzles = useMemo(() => {
-  if (!viewerFilter) return puzzles;
+const toggleViewerFilter = useCallback(
+  (userId: string) => {
+    if (viewerFilter === userId) {
+      setViewerFilter("");
+    } else {
+      setViewerFilter(userId);
+    }
+  },
+  [viewerFilter, setViewerFilter],
+);
 
-  return puzzles.filter((puzzle) => {
-    const subscribersTopic = `puzzle:${puzzle._id}`;
-    const subs = Subscribers.find({ name: subscribersTopic }).fetch();
-    return subs.some((sub) => sub.user === viewerFilter);
-  });
-}, [puzzles, viewerFilter]);
-
-// Use filteredPuzzles instead of puzzles for rendering
-```
-
-**5.4 Add quick filter chips**
-
-For better UX, add clickable user chips to quickly filter:
-
-```typescript
-<div>
-  {allViewers.slice(0, 10).map((viewer) => (
-    <Badge
+// In the render:
+<ViewerFilterChips>
+  {allViewers.slice(0, 8).map((viewer) => (
+    <ViewerChip
       key={viewer.userId}
       bg={viewerFilter === viewer.userId ? "primary" : "secondary"}
-      onClick={() => setViewerFilter(
-        viewerFilter === viewer.userId ? null : viewer.userId
-      )}
-      style={{ cursor: "pointer", margin: "0.25rem" }}
+      $active={viewerFilter === viewer.userId}
+      onClick={() => toggleViewerFilter(viewer.userId)}
+      title={viewerFilter === viewer.userId
+        ? `Clear filter: ${viewer.displayName}`
+        : `Filter to: ${viewer.displayName}`}
     >
       {viewer.displayName}
-    </Badge>
+    </ViewerChip>
   ))}
-</div>
+  {allViewers.length > 8 && (
+    <ViewerChip bg="light" $active={false} style={{ cursor: "default" }}>
+      +{allViewers.length - 8} more
+    </ViewerChip>
+  )}
+</ViewerFilterChips>
 ```
 
-**Estimated Effort:** 1-2 hours
+**Features:**
+- Filter persists in URL (shareable links)
+- Dropdown for all viewers
+- Quick-access badge chips for first 8 viewers
+- Visual feedback (primary/secondary colors)
+- Tooltips explaining click behavior
+- Toggle on/off by clicking same chip twice
+
+**Estimated Effort:** 1.5 hours (complete)
 
 ---
 

@@ -110,6 +110,134 @@ const SearchFormLabel = styled(FormLabel)<{ $canAdd?: boolean }>`
   )}
 `;
 
+const ViewerFilterChips = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+`;
+
+const ViewerChip = styled.span<{
+  $active: boolean;
+  $status: "active" | "idle" | "away";
+}>`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  cursor: pointer;
+  padding: 0.375rem 0.625rem;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  font-weight: normal;
+  transition: all 0.2s ease;
+  max-width: 200px;
+  min-width: 0;
+  background-color: ${(props) => {
+    if (props.$active) {
+      // Active filter - use bright primary colors
+      switch (props.$status) {
+        case "active":
+          return "#28a745"; // Solid green
+        case "idle":
+          return "#ffc107"; // Solid yellow
+        case "away":
+          return "#6c757d"; // Solid grey
+      }
+    }
+    // Inactive filter - use light background colors
+    switch (props.$status) {
+      case "active":
+        return "#d4edda"; // Light green
+      case "idle":
+        return "#fff3cd"; // Light yellow
+      case "away":
+        return "#e2e3e5"; // Light grey
+      default:
+        return "#e2e3e5";
+    }
+  }};
+  color: ${(props) => {
+    if (props.$active) {
+      return "#ffffff"; // White text when active
+    }
+    // Dark text for light backgrounds
+    switch (props.$status) {
+      case "active":
+        return "#155724"; // Dark green
+      case "idle":
+        return "#856404"; // Dark yellow
+      case "away":
+        return "#383d41"; // Dark grey
+      default:
+        return "#383d41";
+    }
+  }};
+  border: 1px solid
+    ${(props) => {
+      if (props.$active) {
+        // Darker borders when active
+        switch (props.$status) {
+          case "active":
+            return "#1e7e34";
+          case "idle":
+            return "#d39e00";
+          case "away":
+            return "#545b62";
+        }
+      }
+      // Light borders when inactive
+      switch (props.$status) {
+        case "active":
+          return "#c3e6cb";
+        case "idle":
+          return "#ffeaa7";
+        case "away":
+          return "#d6d8db";
+        default:
+          return "#d6d8db";
+      }
+    }};
+
+  > * {
+    flex-shrink: 0;
+  }
+
+  &:hover {
+    opacity: 0.85;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+`;
+
+const StatusDot = styled.span<{ $status: "active" | "idle" | "away" }>`
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background-color: ${(props) => {
+    switch (props.$status) {
+      case "active":
+        return "#28a745"; // Green
+      case "idle":
+        return "#ffc107"; // Yellow
+      case "away":
+        return "#6c757d"; // Grey
+      default:
+        return "#6c757d";
+    }
+  }};
+`;
+
+const ViewerFilterName = styled.span`
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  max-width: 150px;
+  flex-shrink: 1;
+`;
+
 const OperatorActionsFormGroup = styled(FormGroup)`
   ${mediaBreakpointDown(
     "xs",
@@ -285,6 +413,17 @@ const PuzzleListView = ({
     [searchParams, setSearchParams],
   );
 
+  const toggleViewerFilter = useCallback(
+    (userId: string) => {
+      if (viewerFilter === userId) {
+        setViewerFilter("");
+      } else {
+        setViewerFilter(userId);
+      }
+    },
+    [viewerFilter, setViewerFilter],
+  );
+
   const onSearchStringChange: NonNullable<FormControlProps["onChange"]> =
     useCallback(
       (e) => {
@@ -314,22 +453,50 @@ const PuzzleListView = ({
   );
 
   // Get all unique viewers across all puzzles
+  // Filter to only include users who have been active in the last 30 minutes
   const allViewers = useTracker(() => {
     const viewersMap = new Map<
       string,
-      { userId: string; displayName: string }
+      {
+        userId: string;
+        displayName: string;
+        status: "active" | "idle" | "away";
+        mostRecentActivity: number;
+      }
     >();
+    const now = Date.now();
+    const thirtyMinutesAgo = now - 30 * 60 * 1000; // 30 minutes in ms
+
     allPuzzles.forEach((puzzle) => {
       const subscribersTopic = `puzzle:${puzzle._id}`;
       const subscribers = Subscribers.find({ name: subscribersTopic }).fetch();
       subscribers.forEach((sub) => {
-        if (!viewersMap.has(sub.user)) {
+        // Only include users who are visible OR were active in last 30 min
+        const lastSeen = sub.updatedAt ? sub.updatedAt.getTime() : 0;
+        const isRecentlyActive = sub.visible || lastSeen > thirtyMinutesAgo;
+
+        if (isRecentlyActive) {
           const user = MeteorUsers.findOne(sub.user);
           if (user?.displayName) {
-            viewersMap.set(sub.user, {
-              userId: sub.user,
-              displayName: user.displayName,
-            });
+            // Determine status based on visibility and time
+            const isActive = sub.visible || now - lastSeen < 60000; // < 1 min
+            const isIdle = !isActive && now - lastSeen < 300000; // 1-5 min
+            const status: "active" | "idle" | "away" = isActive
+              ? "active"
+              : isIdle
+                ? "idle"
+                : "away";
+
+            // Update or add viewer (keep most active status across puzzles)
+            const existing = viewersMap.get(sub.user);
+            if (!existing || lastSeen > existing.mostRecentActivity) {
+              viewersMap.set(sub.user, {
+                userId: sub.user,
+                displayName: user.displayName,
+                status,
+                mostRecentActivity: lastSeen,
+              });
+            }
           }
         }
       });
@@ -657,6 +824,36 @@ const PuzzleListView = ({
               </option>
             ))}
           </FormSelect>
+          {allViewers.length > 0 && (
+            <ViewerFilterChips>
+              {allViewers.slice(0, 8).map((viewer) => (
+                <ViewerChip
+                  key={viewer.userId}
+                  $active={viewerFilter === viewer.userId}
+                  $status={viewer.status}
+                  onClick={() => toggleViewerFilter(viewer.userId)}
+                  title={
+                    viewerFilter === viewer.userId
+                      ? `Clear filter: ${viewer.displayName} (${viewer.status})`
+                      : `Filter to: ${viewer.displayName} (${viewer.status})`
+                  }
+                >
+                  <StatusDot $status={viewer.status} />
+                  <ViewerFilterName>{viewer.displayName}</ViewerFilterName>
+                </ViewerChip>
+              ))}
+              {allViewers.length > 8 && (
+                <ViewerChip
+                  $active={false}
+                  $status="away"
+                  style={{ cursor: "default", opacity: 0.7 }}
+                  title={`+${allViewers.length - 8} more viewers (use dropdown)`}
+                >
+                  +{allViewers.length - 8} more
+                </ViewerChip>
+              )}
+            </ViewerFilterChips>
+          )}
         </FormGroup>
         {addPuzzleContent}
         <SearchFormGroup

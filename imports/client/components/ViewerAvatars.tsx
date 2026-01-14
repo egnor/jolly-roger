@@ -1,35 +1,74 @@
 import { useTracker } from "meteor/react-meteor-data";
 import { useMemo } from "react";
-import OverlayTrigger from "react-bootstrap/OverlayTrigger";
-import Tooltip from "react-bootstrap/Tooltip";
 import styled from "styled-components";
 import MeteorUsers from "../../lib/models/MeteorUsers";
 import { Subscribers } from "../subscribers";
-import Avatar from "./Avatar";
 
 const ViewerContainer = styled.div`
   display: flex;
   align-items: center;
-  gap: 0.25rem;
+  gap: 0.5rem;
   flex-wrap: wrap;
 `;
 
-const AvatarWrapper = styled.div`
-  position: relative;
-  display: inline-block;
-  width: 24px;
-  height: 24px;
-  flex-shrink: 0;
+const ViewerBadge = styled.span<{ $status: "active" | "idle" | "away" }>`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  max-width: 200px;
+  min-width: 0;
+  background-color: ${(props) => {
+    switch (props.$status) {
+      case "active":
+        return "#d4edda"; // Light green
+      case "idle":
+        return "#fff3cd"; // Light yellow
+      case "away":
+        return "#e2e3e5"; // Light grey
+      default:
+        return "#e2e3e5";
+    }
+  }};
+  color: ${(props) => {
+    switch (props.$status) {
+      case "active":
+        return "#155724"; // Dark green
+      case "idle":
+        return "#856404"; // Dark yellow
+      case "away":
+        return "#383d41"; // Dark grey
+      default:
+        return "#383d41";
+    }
+  }};
+  border: 1px solid
+    ${(props) => {
+      switch (props.$status) {
+        case "active":
+          return "#c3e6cb";
+        case "idle":
+          return "#ffeaa7";
+        case "away":
+          return "#d6d8db";
+        default:
+          return "#d6d8db";
+      }
+    }};
+
+  > * {
+    flex-shrink: 0;
+  }
 `;
 
-const StatusDot = styled.div<{ $status: "active" | "idle" | "away" }>`
-  position: absolute;
-  bottom: 0;
-  right: 0;
-  width: 10px;
-  height: 10px;
+const StatusDot = styled.span<{ $status: "active" | "idle" | "away" }>`
+  display: inline-block;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  border: 2px solid white;
+  flex-shrink: 0;
   background-color: ${(props) => {
     switch (props.$status) {
       case "active":
@@ -44,6 +83,15 @@ const StatusDot = styled.div<{ $status: "active" | "idle" | "away" }>`
   }};
 `;
 
+const ViewerName = styled.span`
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  max-width: 150px;
+  flex-shrink: 1;
+`;
+
 const ViewerCount = styled.span`
   font-size: 0.875rem;
   color: #666;
@@ -52,16 +100,16 @@ const ViewerCount = styled.span`
 
 interface ViewerAvatarsProps {
   puzzleId: string;
-  maxDisplay?: number; // Max avatars to show before "+N more"
-  size?: number; // Avatar size in pixels
-  showCount?: boolean; // Show viewer count text
+  maxDisplay?: number; // Max viewers to show before "+N more"
+  size?: number; // Deprecated: no longer used (kept for backwards compatibility)
+  showCount?: boolean; // Deprecated: count is now always shown in "+N more"
 }
 
 const ViewerAvatars = ({
   puzzleId,
   maxDisplay = 5,
-  size = 24,
-  showCount = true,
+  size: _size, // Deprecated parameter, ignored
+  showCount: _showCount, // Deprecated parameter, ignored
 }: ViewerAvatarsProps) => {
   const viewers = useTracker(() => {
     const subscribersTopic = `puzzle:${puzzleId}`;
@@ -118,31 +166,12 @@ const ViewerAvatars = ({
   return (
     <ViewerContainer>
       {displayedViewers.map((viewer) => (
-        <OverlayTrigger
-          key={viewer.userId}
-          placement="top"
-          overlay={
-            <Tooltip id={`viewer-${viewer.userId}-${puzzleId}`}>
-              {viewer.displayName} ({viewer.status})
-            </Tooltip>
-          }
-        >
-          <AvatarWrapper>
-            <Avatar
-              _id={viewer.userId}
-              displayName={viewer.displayName}
-              googleProfilePicture={viewer.googleProfilePicture}
-              discordAccount={viewer.discordAccount}
-              size={size}
-            />
-            <StatusDot $status={viewer.status} />
-          </AvatarWrapper>
-        </OverlayTrigger>
+        <ViewerBadge key={viewer.userId} $status={viewer.status}>
+          <StatusDot $status={viewer.status} />
+          <ViewerName>{viewer.displayName}</ViewerName>
+        </ViewerBadge>
       ))}
       {remainingCount > 0 && <ViewerCount>+{remainingCount} more</ViewerCount>}
-      {showCount && viewers.length > 0 && (
-        <ViewerCount>({viewers.length})</ViewerCount>
-      )}
     </ViewerContainer>
   );
 };
