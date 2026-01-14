@@ -10,6 +10,7 @@ import FormGroup from "react-bootstrap/FormGroup";
 import FormLabel from "react-bootstrap/FormLabel";
 import FormText from "react-bootstrap/FormText";
 import Flags from "../../Flags";
+import MeteorUsers from "../../lib/models/MeteorUsers";
 import linkUserGoogleAccount from "../../methods/linkUserGoogleAccount";
 import unlinkUserGoogleAccount from "../../methods/unlinkUserGoogleAccount";
 
@@ -38,6 +39,13 @@ const GoogleLinkBlock = ({ user }: { user: Meteor.User }) => {
     [],
   );
   const googleDisabled = useTracker(() => Flags.active("disable.google"), []);
+
+  // Use reactive tracker to get current Google account instead of relying on prop
+  // This ensures we always display the latest linked account from the database
+  const googleAccount = useTracker(() => {
+    const currentUser = MeteorUsers.findOne(user._id);
+    return currentUser?.googleAccount;
+  }, [user._id]);
 
   const requestComplete = useCallback((token: string) => {
     const secret = OAuth._retrieveCredentialSecret(token);
@@ -85,7 +93,7 @@ const GoogleLinkBlock = ({ user }: { user: Meteor.User }) => {
       );
     }
 
-    const text = user.googleAccount
+    const text = googleAccount
       ? "Link a different Google account"
       : "Link your Google account";
 
@@ -109,11 +117,11 @@ const GoogleLinkBlock = ({ user }: { user: Meteor.User }) => {
         </Alert>
       ) : undefined}
       <div>
-        {user.googleAccount ? (
-          <div>Currently linked to {user.googleAccount}</div>
+        {googleAccount ? (
+          <div>Currently linked to {googleAccount}</div>
         ) : undefined}
         {linkButton()}{" "}
-        {user.googleAccount ? (
+        {googleAccount ? (
           <Button variant="danger" onClick={onUnlink}>
             Unlink
           </Button>
