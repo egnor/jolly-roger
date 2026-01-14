@@ -664,15 +664,16 @@ const ChatInput = React.memo(
     const fancyEditorRef = useRef<FancyEditorHandle | null>(null);
 
     // Chat history state
-    const [messageHistory, setMessageHistory] = useState<Descendant[][]>([]);
+    const messageHistoryRef = useRef<Descendant[][]>([]);
     const [historyIndex, setHistoryIndex] = useState<number>(-1);
+    const isNavigatingHistoryRef = useRef<boolean>(false);
 
     const onContentChange = useCallback(
       (newContent: Descendant[]) => {
         setContent(newContent);
         onHeightChangeCb(0);
-        // Reset history navigation when user types
-        if (historyIndex !== -1) {
+        // Reset history navigation when user types (but not when we're actively navigating)
+        if (historyIndex !== -1 && !isNavigatingHistoryRef.current) {
           setHistoryIndex(-1);
         }
       },
@@ -749,10 +750,8 @@ const ChatInput = React.memo(
         };
 
         // Save to message history (keep last 50 messages)
-        setMessageHistory((prev) => {
-          const newHistory = [content, ...prev];
-          return newHistory.slice(0, 50);
-        });
+        const newHistory = [content, ...messageHistoryRef.current];
+        messageHistoryRef.current = newHistory.slice(0, 50);
         setHistoryIndex(-1);
 
         // Send chat message.
@@ -851,35 +850,53 @@ const ChatInput = React.memo(
       [],
     );
 
-    const handleNavigateHistory = useCallback(
-      (direction: "up" | "down") => {
+    const handleNavigateHistory = useCallback((direction: "up" | "down") => {
+      isNavigatingHistoryRef.current = true;
+      setHistoryIndex((currentIndex) => {
+        const currentHistory = messageHistoryRef.current;
+        const newIndex =
+          direction === "up" ? currentIndex + 1 : currentIndex - 1;
+
         if (direction === "up") {
           // Navigate to older messages
-          const newIndex = historyIndex + 1;
-          if (newIndex < messageHistory.length) {
-            setHistoryIndex(newIndex);
-            const historicalMessage = messageHistory[newIndex]!;
+          if (newIndex < currentHistory.length) {
+            const historicalMessage = currentHistory[newIndex]!;
             fancyEditorRef.current?.setContent(historicalMessage);
             setContent(historicalMessage);
+            // Reset flag after state updates have processed
+            setTimeout(() => {
+              isNavigatingHistoryRef.current = false;
+            }, 0);
+            return newIndex;
           }
+          isNavigatingHistoryRef.current = false;
+          return currentIndex; // Don't change index if we can't navigate further
         } else {
           // Navigate to newer messages
-          const newIndex = historyIndex - 1;
           if (newIndex >= 0) {
-            setHistoryIndex(newIndex);
-            const historicalMessage = messageHistory[newIndex]!;
+            const historicalMessage = currentHistory[newIndex]!;
             fancyEditorRef.current?.setContent(historicalMessage);
             setContent(historicalMessage);
+            // Reset flag after state updates have processed
+            setTimeout(() => {
+              isNavigatingHistoryRef.current = false;
+            }, 0);
+            return newIndex;
           } else if (newIndex === -1) {
             // Back to current (empty) message
-            setHistoryIndex(-1);
             fancyEditorRef.current?.clearInput();
             setContent(initialValue);
+            // Reset flag after state updates have processed
+            setTimeout(() => {
+              isNavigatingHistoryRef.current = false;
+            }, 0);
+            return -1;
           }
+          isNavigatingHistoryRef.current = false;
+          return currentIndex; // Don't change index if we can't navigate further
         }
-      },
-      [historyIndex, messageHistory],
-    );
+      });
+    }, []);
 
     const errorModal = (
       <Modal show onHide={clearUploadImageError}>

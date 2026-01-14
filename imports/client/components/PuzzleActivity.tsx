@@ -21,6 +21,7 @@ import roundedTime from "../../lib/roundedTime";
 import ActivityBuckets from "../ActivityBuckets";
 import RelativeTime from "./RelativeTime";
 import { mediaBreakpointDown } from "./styling/responsive";
+import ViewerAvatars from "./ViewerAvatars";
 
 const PuzzleActivityItems = styled.span`
   font-size: 14px;
@@ -88,12 +89,14 @@ interface PuzzleActivityProps {
   huntId: string;
   puzzleId: string;
   unlockTime: Date;
+  showViewers?: boolean;
 }
 
 const PuzzleActivity = ({
   huntId,
   puzzleId,
   unlockTime,
+  showViewers = true,
 }: PuzzleActivityProps) => {
   const [finalBucket, setFinalBucket] = useState(
     roundedTime(ACTIVITY_GRANULARITY),
@@ -184,6 +187,16 @@ const PuzzleActivity = ({
   const sparklineTooltip = (
     <Tooltip id={`${idPrefix}-sparkline`}>
       <div>People working on this puzzle:</div>
+      {showViewers && (
+        <div style={{ marginTop: "0.5rem", marginBottom: "0.5rem" }}>
+          <ViewerAvatars
+            puzzleId={puzzleId}
+            maxDisplay={10}
+            size={24}
+            showCount={true}
+          />
+        </div>
+      )}
       <PuzzleActivityDetailTimeRange>
         <div>
           {/* Don't need to use RelativeTime here because this duration doesn't change, even as now

@@ -5,7 +5,9 @@
       "Bash(meteor npm run lint:biome:*)",
       "Bash(meteor npm run lint:eslint:*)",
       "Bash(meteor node:*)",
-      "Bash(meteor mongo:*)"
+      "Bash(meteor mongo:*)",
+      "Bash(npm run lint:biome:*)",
+      "Bash(npm run lint:*)"
     ]
   }
 }

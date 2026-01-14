@@ -65,15 +65,14 @@ const helpCommand: CommandHandler = {
   async handle(chatMessage: ChatMessageType, _args: string): Promise<boolean> {
     const commandList = Object.entries(commands)
       .map(([name, handler]) => {
-        const privacyLabel = handler.private ? " (private)" : "";
-        return `**/${name}**${privacyLabel} - ${handler.description}`;
+        return `**/${name}** - ${handler.description}`;
       })
       .join("\n");
 
     await sendChatMessageInternal({
       puzzleId: chatMessage.puzzle,
       content: contentFromMessage(
-        `📋 **Available Commands**\n\n${commandList}\n\nPrivate commands are only visible to you.`,
+        `📋 **Available Commands**\n\n${commandList}\n\nAll commands are private (only visible to you).`,
       ),
       sender: undefined,
       recipient: chatMessage.sender,
@@ -161,9 +160,9 @@ const debugCommand: CommandHandler = {
   },
 };
 
-// Command: /users - Show user activity summary
+// Command: /users - Show all-time user activity summary
 const usersCommand: CommandHandler = {
-  description: "Show which users have worked on this puzzle and what they did",
+  description: "Show all-time user activity on this puzzle",
   private: true,
   async handle(chatMessage: ChatMessageType, _args: string): Promise<boolean> {
     Logger.info("/users command invoked", {
@@ -307,30 +306,30 @@ const usersCommand: CommandHandler = {
         return `${minutes}m ${remainingSeconds}s`;
       };
 
-      // Build summary strings
+      // Build summary strings with icons (matching PuzzleActivity.tsx icons)
       const userSummaries = userDataList.map((userData) => {
         const activities: string[] = [];
+
+        // All-time activity
         if (userData.chatCount > 0) {
-          activities.push(
-            `${userData.chatCount} chat message${userData.chatCount !== 1 ? "s" : ""}`,
-          );
+          activities.push(`💬 ${userData.chatCount}`);
+        }
+        if (userData.callSeconds > 0) {
+          activities.push(`📞 ${formatTime(userData.callSeconds)}`);
         }
         if (userData.docBuckets > 0) {
           // Note: docBuckets are time windows, not discrete edits
           // In production: ~5 min/bucket, in development: ~5 sec/bucket
-          activities.push(`~${userData.docBuckets} active editing periods`);
-        }
-        if (userData.callSeconds > 0) {
-          activities.push(`${formatTime(userData.callSeconds)} speaking`);
+          activities.push(`📝 ~${userData.docBuckets}`);
         }
 
-        return `• **${userData.displayName}**: ${activities.join(", ")}`;
+        return `• **${userData.displayName}**: ${activities.join("  ")}`;
       });
 
       await sendChatMessageInternal({
         puzzleId: chatMessage.puzzle,
         content: contentFromMessage(
-          `👥 **User Activity** (${allUserIds.size} user${allUserIds.size !== 1 ? "s" : ""})\n\n${userSummaries.join("\n")}`,
+          `👥 **User Activity** (${allUserIds.size} user${allUserIds.size !== 1 ? "s" : ""}) - All Time\n\n💬 Chat  📞 Call  📝 Doc\n\n${userSummaries.join("\n")}`,
         ),
         sender: undefined,
         recipient: chatMessage.sender,
@@ -343,6 +342,199 @@ const usersCommand: CommandHandler = {
         puzzleId: chatMessage.puzzle,
         content: contentFromMessage(
           `❌ Error getting user activity: ${error instanceof Error ? error.message : "Unknown error"}`,
+        ),
+        sender: undefined,
+        recipient: chatMessage.sender,
+      });
+      return true;
+    }
+  },
+};
+
+// Command: /recent - Show recent user activity summary (last 30 minutes)
+const recentCommand: CommandHandler = {
+  description: "Show recent user activity on this puzzle (last 30 minutes)",
+  private: true,
+  async handle(chatMessage: ChatMessageType, _args: string): Promise<boolean> {
+    Logger.info("/recent command invoked", {
+      puzzleId: chatMessage.puzzle,
+      userId: chatMessage.sender,
+    });
+
+    try {
+      const puzzle = await Puzzles.findOneAsync(chatMessage.puzzle);
+      if (!puzzle) {
+        throw new Error("Puzzle not found");
+      }
+
+      // Define time window for "recent" activity (30 minutes)
+      const recentThreshold = new Date(Date.now() - 30 * 60 * 1000);
+
+      // Get recent chat messages
+      const chatMessages = await ChatMessages.find({
+        puzzle: chatMessage.puzzle,
+        hunt: puzzle.hunt,
+        sender: { $exists: true },
+        recipient: { $exists: false },
+        timestamp: { $gte: recentThreshold },
+      }).fetchAsync();
+
+      // Count messages per user
+      const chatActivityRecent = new Map<string, number>();
+      for (const msg of chatMessages) {
+        if (msg.sender) {
+          chatActivityRecent.set(
+            msg.sender,
+            (chatActivityRecent.get(msg.sender) || 0) + 1,
+          );
+        }
+      }
+
+      // Get all documents for this puzzle
+      const documents = await Documents.find({
+        puzzle: chatMessage.puzzle,
+        hunt: puzzle.hunt,
+      }).fetchAsync();
+
+      // Get recent document activity
+      const docActivityRecent = new Map<string, number>();
+      for (const doc of documents) {
+        const activities = await DocumentActivities.find({
+          document: doc._id,
+          user: { $exists: true },
+          ts: { $gte: recentThreshold },
+        }).fetchAsync();
+
+        for (const activity of activities) {
+          if (activity.user) {
+            docActivityRecent.set(
+              activity.user,
+              (docActivityRecent.get(activity.user) || 0) + 1,
+            );
+          }
+        }
+      }
+
+      // Get recent call activity
+      const callActivities = await CallActivities.find({
+        call: chatMessage.puzzle,
+        user: { $exists: true },
+        ts: { $gte: recentThreshold },
+      }).fetchAsync();
+
+      // Count speaking time per user
+      const callActivityRecent = new Map<string, number>();
+      for (const activity of callActivities) {
+        if (activity.user) {
+          callActivityRecent.set(
+            activity.user,
+            (callActivityRecent.get(activity.user) || 0) + 1,
+          );
+        }
+      }
+
+      // Combine all users with recent activity
+      const allUserIds = new Set([
+        ...chatActivityRecent.keys(),
+        ...docActivityRecent.keys(),
+        ...callActivityRecent.keys(),
+      ]);
+
+      Logger.info("/recent command found activity", {
+        chatUsers: chatActivityRecent.size,
+        docUsers: docActivityRecent.size,
+        callUsers: callActivityRecent.size,
+        totalUsers: allUserIds.size,
+      });
+
+      if (allUserIds.size === 0) {
+        await sendChatMessageInternal({
+          puzzleId: chatMessage.puzzle,
+          content: contentFromMessage(
+            "👥 **Recent User Activity**\n\nNo user activity in the last 30 minutes.",
+          ),
+          sender: undefined,
+          recipient: chatMessage.sender,
+        });
+        return true;
+      }
+
+      // Fetch user details and build summary
+      const userDataList: Array<{
+        userId: string;
+        displayName: string;
+        chatCountRecent: number;
+        docBucketsRecent: number;
+        callSecondsRecent: number;
+        totalRecent: number;
+      }> = [];
+
+      for (const userId of allUserIds) {
+        const user = await MeteorUsers.findOneAsync(userId);
+        const displayName = user?.displayName || "Unknown User";
+        const chatCountRecent = chatActivityRecent.get(userId) || 0;
+        const docBucketsRecent = docActivityRecent.get(userId) || 0;
+        const callSecondsRecent = callActivityRecent.get(userId) || 0;
+
+        userDataList.push({
+          userId,
+          displayName,
+          chatCountRecent,
+          docBucketsRecent,
+          callSecondsRecent,
+          totalRecent: chatCountRecent + docBucketsRecent + callSecondsRecent,
+        });
+      }
+
+      // Sort by recent activity (descending)
+      userDataList.sort((a, b) => b.totalRecent - a.totalRecent);
+
+      // Format time nicely
+      const formatTime = (seconds: number): string => {
+        if (seconds < 60) {
+          return `${seconds}s`;
+        }
+        const minutes = Math.floor(seconds / 60);
+        const remainingSeconds = seconds % 60;
+        if (remainingSeconds === 0) {
+          return `${minutes}m`;
+        }
+        return `${minutes}m ${remainingSeconds}s`;
+      };
+
+      // Build summary strings with icons
+      const userSummaries = userDataList.map((userData) => {
+        const activities: string[] = [];
+
+        if (userData.chatCountRecent > 0) {
+          activities.push(`💬 ${userData.chatCountRecent}`);
+        }
+        if (userData.callSecondsRecent > 0) {
+          activities.push(`📞 ${formatTime(userData.callSecondsRecent)}`);
+        }
+        if (userData.docBucketsRecent > 0) {
+          activities.push(`📝 ~${userData.docBucketsRecent}`);
+        }
+
+        return `• **${userData.displayName}**: ${activities.join("  ")}`;
+      });
+
+      await sendChatMessageInternal({
+        puzzleId: chatMessage.puzzle,
+        content: contentFromMessage(
+          `👥 **Recent Activity** (${allUserIds.size} user${allUserIds.size !== 1 ? "s" : ""}) - Last 30min\n\n💬 Chat  📞 Call  📝 Doc\n\n${userSummaries.join("\n")}`,
+        ),
+        sender: undefined,
+        recipient: chatMessage.sender,
+      });
+
+      return true;
+    } catch (error) {
+      Logger.error("Error running recent command", { error });
+      await sendChatMessageInternal({
+        puzzleId: chatMessage.puzzle,
+        content: contentFromMessage(
+          `❌ Error getting recent activity: ${error instanceof Error ? error.message : "Unknown error"}`,
         ),
         sender: undefined,
         recipient: chatMessage.sender,
@@ -505,6 +697,7 @@ const commands: Record<string, CommandHandler> = {
   help: helpCommand,
   debug: debugCommand,
   users: usersCommand,
+  recent: recentCommand,
   summary: summaryCommand,
 };
 

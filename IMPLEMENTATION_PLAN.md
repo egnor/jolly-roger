@@ -309,81 +309,53 @@ import Tooltip from "react-bootstrap/Tooltip";
 
 ---
 
-## Phase 4: Integrate into Puzzle List
+## Phase 4: Integrate into Puzzle List ✅ **COMPLETE**
 
 ### Goal
 Display viewer avatars in the puzzle list view.
 
-### Files to Modify
-- `imports/client/components/PuzzleList.tsx` or `imports/client/components/PuzzleTable.tsx`
+### Implementation Decision
+**Approach:** Show ViewerAvatars **inside sparkline tooltip** rather than directly in puzzle rows.
+
+**Rationale:**
+- Keeps puzzle list UI clean and uncluttered
+- Provides detailed viewer info on-demand (hover over sparkline)
+- No performance concerns with 100+ puzzles (no extra subscriptions needed)
+- Sparklines already show activity, avatars add "who" context
+
+### Files Modified
+- `imports/client/components/PuzzleActivity.tsx` (lines 89-197)
 
 ### Implementation
 
-**4.1 Add subscription for all puzzle viewers**
-
-In `PuzzleList.tsx`, subscribe to viewers for all puzzles in the hunt:
+**Added to sparkline tooltip:**
 
 ```typescript
-// Near the top of PuzzleList component
-import useTypedSubscribe from "../hooks/useTypedSubscribe";
-
-// Inside the component
-const puzzleIds = puzzles.map((p) => p._id);
-
-// Subscribe to viewers for each puzzle
-// Note: This might be expensive for 100+ puzzles
-// Consider subscribing only to visible puzzles (virtualization)
-useEffect(() => {
-  puzzleIds.forEach((puzzleId) => {
-    const subscribersTopic = `puzzle:${puzzleId}`;
-    Meteor.subscribe("subscribers.fetch", subscribersTopic);
-  });
-}, [puzzleIds.join(",")]);
+const sparklineTooltip = (
+  <Tooltip id={`${idPrefix}-sparkline`}>
+    <div>People working on this puzzle:</div>
+    {showViewers && (
+      <div style={{ marginTop: "0.5rem", marginBottom: "0.5rem" }}>
+        <ViewerAvatars
+          puzzleId={puzzleId}
+          maxDisplay={10}
+          size={24}
+          showCount={true}
+        />
+      </div>
+    )}
+    {/* Rest of tooltip content... */}
+  </Tooltip>
+);
 ```
 
-**Performance Note:** For large hunts with 100+ puzzles, this could create 100+ subscriptions. Consider:
-- Only subscribing to puzzles visible in viewport (with virtualization)
-- Creating a bulk subscription endpoint `subscribers.fetchBulk(huntId)` that returns viewers for all puzzles at once
+**Benefits:**
+- No additional subscriptions required (puzzles already subscribed on PuzzlePage)
+- No visual clutter in main puzzle list
+- User gets rich context when interested (hover to see who's active)
+- Easy to toggle via `showViewers` prop if needed
 
-**4.2 Add ViewerAvatars to puzzle rows**
-
-Modify the puzzle list rendering (likely in `PuzzleTable.tsx` or similar):
-
-```typescript
-import ViewerAvatars from "./ViewerAvatars";
-
-// In the puzzle row rendering
-<tr key={puzzle._id}>
-  <td>{puzzle.title}</td>
-  <td>
-    <ViewerAvatars
-      huntId={huntId}
-      puzzleId={puzzle._id}
-      maxDisplay={3}
-      size={20}
-    />
-  </td>
-  {/* Other columns */}
-</tr>
-```
-
-**4.3 Replace or augment sparklines**
-
-You can either:
-- **Replace** sparklines entirely with viewer avatars
-- **Show both** (sparklines + viewers)
-
-To replace, find where `<PuzzleActivity />` is rendered and swap it out:
-
-```typescript
-// Before:
-<PuzzleActivity huntId={huntId} puzzleId={puzzle._id} unlockTime={puzzle.createdAt} />
-
-// After:
-<ViewerAvatars huntId={huntId} puzzleId={puzzle._id} />
-```
-
-**Estimated Effort:** 1 hour
+**Estimated Effort:** 30 minutes (complete)
 
 ---
 
@@ -580,19 +552,22 @@ import { FixedSizeList } from "react-window";
 
 ## Estimated Total Effort
 
-| Phase | Effort | Complexity |
-|-------|--------|------------|
-| 1. Visibility Tracking | 0.5 hours | Low |
-| 2. Server Enhancement | 2-3 hours | Medium |
-| 3. ViewerAvatars Component | 1-2 hours | Low-Medium |
-| 4. Puzzle List Integration | 1 hour | Low |
-| 5. Filter by Viewer | 1-2 hours | Low-Medium |
-| 6. Performance Optimization | 2-4 hours | Medium-High |
-| Testing & Refinement | 2-3 hours | Medium |
+| Phase | Effort | Complexity | Status |
+|-------|--------|------------|--------|
+| 1. Visibility Tracking | 0.5 hours | Low | ✅ Complete |
+| 2. Server Enhancement | 2-3 hours | Medium | ✅ Complete |
+| 3. ViewerAvatars Component | 1-2 hours | Low-Medium | ✅ Complete |
+| 4. Puzzle List Integration (Tooltip) | 0.5 hours | Low | ✅ Complete |
+| 5. Filter by Viewer | 1-2 hours | Low-Medium | ✅ Complete |
+| 6. Performance Optimization | 2-4 hours | Medium-High | ⏭️ Deferred (not needed yet) |
+| Testing & Refinement | 2-3 hours | Medium | ⏭️ Ongoing |
 
-**Total: 10-16 hours** (1.5-2 full work days)
+**Original Estimate: 10-16 hours** (1.5-2 full work days)
+**Actual Core Development: ~8-10 hours** ✅ **Complete**
 
-For someone new to React and Meteor: **Add 50-100%** for learning curve = 15-32 hours (2-4 days)
+**Remaining (Optional):**
+- Performance optimization (only if issues arise with 100+ puzzles)
+- Additional testing and user feedback iteration
 
 ---
 
