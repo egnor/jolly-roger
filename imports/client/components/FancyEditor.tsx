@@ -682,6 +682,8 @@ export interface FancyEditorHandle {
   clearInput: () => void;
   insertImage: (url: string, id: string, status: ImageStatus) => void;
   replaceImage: (url: string, id: string, status: ImageStatus) => void;
+  setContent: (content: Descendant[]) => void;
+  getContent: () => Descendant[];
 }
 
 const FancyEditor = React.forwardRef(
@@ -695,6 +697,7 @@ const FancyEditor = React.forwardRef(
       onSubmit,
       uploadImageFile,
       disabled,
+      onNavigateHistory,
     }: {
       className?: string;
       initialContent: Descendant[];
@@ -704,6 +707,7 @@ const FancyEditor = React.forwardRef(
       uploadImageFile: (file: File) => void;
       onSubmit: () => boolean;
       disabled?: boolean;
+      onNavigateHistory?: (direction: "up" | "down") => void;
     },
     forwardedRef: React.Ref<FancyEditorHandle>,
   ) => {
@@ -810,10 +814,40 @@ const FancyEditor = React.forwardRef(
         undos: [],
       };
     }, [editor]);
+
+    const setContent = useCallback(
+      (content: Descendant[]) => {
+        // Remove all existing nodes
+        const children = [...editor.children];
+        children.forEach((node) => {
+          editor.apply({ type: "remove_node", path: [0], node });
+        });
+
+        // Insert the new content
+        content.forEach((node, index) => {
+          editor.apply({
+            type: "insert_node",
+            path: [index],
+            node,
+          });
+        });
+
+        // Move selection to the end of the content
+        Transforms.select(editor, Editor.end(editor, []));
+      },
+      [editor],
+    );
+
+    const getContent = useCallback(() => {
+      return editor.children;
+    }, [editor]);
+
     useImperativeHandle(forwardedRef, () => ({
       clearInput,
       insertImage,
       replaceImage,
+      setContent,
+      getContent,
     }));
 
     const renderElement = useCallback(
@@ -946,6 +980,20 @@ const FancyEditor = React.forwardRef(
           }
         }
 
+        // Handle history navigation when NOT in autocomplete mode
+        if (!completionAnchorRange || matchingMentions.length === 0) {
+          if (event.key === "ArrowUp" && onNavigateHistory) {
+            event.preventDefault();
+            onNavigateHistory("up");
+            return;
+          }
+          if (event.key === "ArrowDown" && onNavigateHistory) {
+            event.preventDefault();
+            onNavigateHistory("down");
+            return;
+          }
+        }
+
         if (event.key === "Enter") {
           if (event.shiftKey) {
             // Insert soft break.  Avoid hard breaks entirely.
@@ -967,6 +1015,7 @@ const FancyEditor = React.forwardRef(
         editor,
         onSubmit,
         clearInput,
+        onNavigateHistory,
       ],
     );
 

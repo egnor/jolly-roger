@@ -274,6 +274,13 @@ const GoogleAuthorizeDriveClientForm = () => {
 
   const requestComplete = useCallback((token: string) => {
     const secret = OAuth._retrieveCredentialSecret(token);
+    if (!secret) {
+      setState({
+        submitState: SubmitState.ERROR,
+        error: new Error("Failed to retrieve credential secret"),
+      });
+      return;
+    }
     setState({ submitState: SubmitState.SUBMITTING });
     configureGdriveCreds.call({ key: token, secret }, (error) => {
       if (error) {

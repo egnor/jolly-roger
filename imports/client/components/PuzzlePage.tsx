@@ -407,10 +407,19 @@ const ChatHistory = React.forwardRef(
   ) => {
     // TODO: consider using useFind once fixed upstream
     const chatMessages: FilteredChatMessageType[] = useTracker(() => {
-      return ChatMessages.find(
+      const currentUserId = Meteor.userId();
+      const messages = ChatMessages.find(
         { puzzle: puzzleId },
         { sort: { timestamp: 1 } },
       ).fetch();
+
+      // Filter messages: show all public messages and private messages for current user
+      return messages.filter((msg) => {
+        // Show if no recipient (public message)
+        if (!msg.recipient) return true;
+        // Show if recipient is current user
+        return msg.recipient === currentUserId;
+      });
     }, [puzzleId]);
 
     const ref = useRef<HTMLDivElement>(null);
@@ -653,12 +662,21 @@ const ChatInput = React.memo(
 
     const [content, setContent] = useState<Descendant[]>(initialValue);
     const fancyEditorRef = useRef<FancyEditorHandle | null>(null);
+
+    // Chat history state
+    const [messageHistory, setMessageHistory] = useState<Descendant[][]>([]);
+    const [historyIndex, setHistoryIndex] = useState<number>(-1);
+
     const onContentChange = useCallback(
       (newContent: Descendant[]) => {
         setContent(newContent);
         onHeightChangeCb(0);
+        // Reset history navigation when user types
+        if (historyIndex !== -1) {
+          setHistoryIndex(-1);
+        }
       },
-      [onHeightChangeCb],
+      [onHeightChangeCb, historyIndex],
     );
     const hasNonTrivialContent = useMemo(() => {
       return (
@@ -729,6 +747,13 @@ const ChatInput = React.memo(
               }
             }),
         };
+
+        // Save to message history (keep last 50 messages)
+        setMessageHistory((prev) => {
+          const newHistory = [content, ...prev];
+          return newHistory.slice(0, 50);
+        });
+        setHistoryIndex(-1);
 
         // Send chat message.
         sendChatMessage.call({
@@ -826,6 +851,36 @@ const ChatInput = React.memo(
       [],
     );
 
+    const handleNavigateHistory = useCallback(
+      (direction: "up" | "down") => {
+        if (direction === "up") {
+          // Navigate to older messages
+          const newIndex = historyIndex + 1;
+          if (newIndex < messageHistory.length) {
+            setHistoryIndex(newIndex);
+            const historicalMessage = messageHistory[newIndex]!;
+            fancyEditorRef.current?.setContent(historicalMessage);
+            setContent(historicalMessage);
+          }
+        } else {
+          // Navigate to newer messages
+          const newIndex = historyIndex - 1;
+          if (newIndex >= 0) {
+            setHistoryIndex(newIndex);
+            const historicalMessage = messageHistory[newIndex]!;
+            fancyEditorRef.current?.setContent(historicalMessage);
+            setContent(historicalMessage);
+          } else if (newIndex === -1) {
+            // Back to current (empty) message
+            setHistoryIndex(-1);
+            fancyEditorRef.current?.clearInput();
+            setContent(initialValue);
+          }
+        }
+      },
+      [historyIndex, messageHistory],
+    );
+
     const errorModal = (
       <Modal show onHide={clearUploadImageError}>
         <Modal.Header closeButton>Error uploading image to chat</Modal.Header>
@@ -853,6 +908,7 @@ const ChatInput = React.memo(
             onSubmit={sendContentMessage}
             uploadImageFile={uploadImageFile}
             disabled={disabled}
+            onNavigateHistory={handleNavigateHistory}
           />
           <Button
             variant="secondary"
@@ -1122,10 +1178,9 @@ const PuzzlePageMetadata = ({
       <InsertImage documentId={document._id} />
     );
 
-  const documentLink =
-    document && !isDesktop ? (
-      <DocumentDisplay document={document} displayMode="link" user={selfUser} />
-    ) : null;
+  const documentLink = document ? (
+    <DocumentDisplay document={document} displayMode="link" user={selfUser} />
+  ) : null;
 
   const editButton = canUpdate ? (
     <Button
@@ -1968,11 +2023,35 @@ const PuzzlePage = React.memo(() => {
   const huntId = useParams<"huntId">().huntId!;
   const puzzleId = useParams<"puzzleId">().puzzleId!;
 
+  // Track visibility of the puzzle page tab
+  const [isVisible, setIsVisible] = useState<DocumentVisibilityState>(
+    window.document.visibilityState,
+  );
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      setIsVisible(window.document.visibilityState);
+    };
+
+    window.document.addEventListener(
+      "visibilitychange",
+      handleVisibilityChange,
+    );
+
+    return () => {
+      window.document.removeEventListener(
+        "visibilitychange",
+        handleVisibilityChange,
+      );
+    };
+  }, []);
+
   // Add the current user to the collection of people viewing this puzzle.
   const subscribersTopic = `puzzle:${puzzleId}`;
   useSubscribe("subscribers.inc", subscribersTopic, {
     puzzle: puzzleId,
     hunt: huntId,
+    visible: isVisible,
   });
 
   // Get the _list_ of subscribers to this puzzle and the _count_ of subscribers

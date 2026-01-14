@@ -18,6 +18,7 @@ import type { FormControlProps } from "react-bootstrap/FormControl";
 import FormControl from "react-bootstrap/FormControl";
 import FormGroup from "react-bootstrap/FormGroup";
 import FormLabel from "react-bootstrap/FormLabel";
+import FormSelect from "react-bootstrap/FormSelect";
 import InputGroup from "react-bootstrap/InputGroup";
 import ToggleButton from "react-bootstrap/ToggleButton";
 import ToggleButtonGroup from "react-bootstrap/ToggleButtonGroup";
@@ -26,6 +27,7 @@ import styled, { css } from "styled-components";
 import { sortedBy } from "../../lib/listUtils";
 import Bookmarks from "../../lib/models/Bookmarks";
 import Hunts from "../../lib/models/Hunts";
+import MeteorUsers from "../../lib/models/MeteorUsers";
 import type { PuzzleType } from "../../lib/models/Puzzles";
 import Puzzles from "../../lib/models/Puzzles";
 import Tags from "../../lib/models/Tags";
@@ -45,8 +47,11 @@ import {
   useOperatorActionsHiddenForHunt,
 } from "../hooks/persisted-state";
 import useFocusRefOnFindHotkey from "../hooks/useFocusRefOnFindHotkey";
+import useSubscribeAvatars from "../hooks/useSubscribeAvatars";
+import useSubscribeDisplayNames from "../hooks/useSubscribeDisplayNames";
 import useTypedSubscribe from "../hooks/useTypedSubscribe";
 import { compilePuzzleMatcher } from "../search";
+import { Subscribers } from "../subscribers";
 import HuntNav from "./HuntNav";
 import PuzzleList from "./PuzzleList";
 import type {
@@ -194,8 +199,17 @@ const PuzzleListView = ({
     [canUpdate, huntId, loading],
   );
 
+  // Subscribe to viewers for all puzzles in the hunt
+  useTracker(() => {
+    allPuzzles.forEach((puzzle) => {
+      const subscribersTopic = `puzzle:${puzzle._id}`;
+      Meteor.subscribe("subscribers.fetch", subscribersTopic);
+    });
+  }, [allPuzzles]);
+
   const [searchParams, setSearchParams] = useSearchParams();
   const searchString = searchParams.get("q") ?? "";
+  const viewerFilter = searchParams.get("viewer") ?? "";
   const addModalRef = useRef<PuzzleModalFormHandle>(null);
   const searchBarRef = useRef<HTMLInputElement>(null);
   const [displayMode, setDisplayMode] = useHuntPuzzleListDisplayMode(huntId);
@@ -257,6 +271,20 @@ const PuzzleListView = ({
     [searchParams, setSearchParams],
   );
 
+  const setViewerFilter = useCallback(
+    (val: string) => {
+      const u = new URLSearchParams(searchParams);
+      if (val) {
+        u.set("viewer", val);
+      } else {
+        u.delete("viewer");
+      }
+
+      setSearchParams(u);
+    },
+    [searchParams, setSearchParams],
+  );
+
   const onSearchStringChange: NonNullable<FormControlProps["onChange"]> =
     useCallback(
       (e) => {
@@ -283,6 +311,48 @@ const PuzzleListView = ({
       }
     },
     [searchString, allTags],
+  );
+
+  // Get all unique viewers across all puzzles
+  const allViewers = useTracker(() => {
+    const viewersMap = new Map<
+      string,
+      { userId: string; displayName: string }
+    >();
+    allPuzzles.forEach((puzzle) => {
+      const subscribersTopic = `puzzle:${puzzle._id}`;
+      const subscribers = Subscribers.find({ name: subscribersTopic }).fetch();
+      subscribers.forEach((sub) => {
+        if (!viewersMap.has(sub.user)) {
+          const user = MeteorUsers.findOne(sub.user);
+          if (user?.displayName) {
+            viewersMap.set(sub.user, {
+              userId: sub.user,
+              displayName: user.displayName,
+            });
+          }
+        }
+      });
+    });
+    return Array.from(viewersMap.values()).sort((a, b) =>
+      a.displayName.localeCompare(b.displayName),
+    );
+  }, [allPuzzles]);
+
+  const puzzlesMatchingViewerFilter = useCallback(
+    (puzzles: PuzzleType[]): PuzzleType[] => {
+      if (!viewerFilter) {
+        return puzzles;
+      }
+      return puzzles.filter((puzzle) => {
+        const subscribersTopic = `puzzle:${puzzle._id}`;
+        const subscribers = Subscribers.find({
+          name: subscribersTopic,
+        }).fetch();
+        return subscribers.some((sub) => sub.user === viewerFilter);
+      });
+    },
+    [viewerFilter],
   );
 
   const puzzlesMatchingSolvedFilter = useCallback(
@@ -500,16 +570,20 @@ const PuzzleListView = ({
   );
 
   const matchingSearch = puzzlesMatchingSearchString(allPuzzles);
-  const matchingSearchAndSolved = puzzlesMatchingSolvedFilter(matchingSearch);
-  // Normally, we'll just show matchingSearchAndSolved, but if that produces
+  const matchingSearchAndViewer = puzzlesMatchingViewerFilter(matchingSearch);
+  const matchingSearchAndViewerAndSolved = puzzlesMatchingSolvedFilter(
+    matchingSearchAndViewer,
+  );
+  // Normally, we'll just show matchingSearchAndViewerAndSolved, but if that produces
   // no results, and there *is* a solved puzzle that is not being displayed due
   // to the solved filter, then show that and a note that we're showing solved
   // puzzles because no unsolved puzzles matched.
   const solvedOverConstrains =
-    matchingSearch.length > 0 && matchingSearchAndSolved.length === 0;
+    matchingSearchAndViewer.length > 0 &&
+    matchingSearchAndViewerAndSolved.length === 0;
   const retainedPuzzles = solvedOverConstrains
-    ? matchingSearch
-    : matchingSearchAndSolved;
+    ? matchingSearchAndViewer
+    : matchingSearchAndViewerAndSolved;
   const retainedDeletedPuzzles =
     deletedPuzzles && puzzlesMatchingSearchString(deletedPuzzles);
 
@@ -570,6 +644,20 @@ const PuzzleListView = ({
             </StyledToggleButtonGroup>
           </ButtonToolbar>
         </FormGroup>
+        <FormGroup>
+          <FormLabel>Filter by viewer</FormLabel>
+          <FormSelect
+            value={viewerFilter}
+            onChange={(e) => setViewerFilter(e.target.value)}
+          >
+            <option value="">All puzzles</option>
+            {allViewers.map((viewer) => (
+              <option key={viewer.userId} value={viewer.userId}>
+                {viewer.displayName}
+              </option>
+            ))}
+          </FormSelect>
+        </FormGroup>
         {addPuzzleContent}
         <SearchFormGroup
           $canAdd={canAdd}
@@ -621,6 +709,8 @@ const PuzzleListPage = () => {
 
   // Don't bother including this in loading - it's ok if they trickle in
   useTypedSubscribe(puzzleActivityForHunt, { huntId });
+  useSubscribeDisplayNames(huntId);
+  useSubscribeAvatars(huntId);
 
   return loading ? (
     <span>loading...</span>

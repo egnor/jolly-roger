@@ -29,6 +29,7 @@ import type { PuzzleModalFormSubmitPayload } from "./PuzzleModalForm";
 import PuzzleModalForm from "./PuzzleModalForm";
 import { mediaBreakpointDown } from "./styling/responsive";
 import TagList from "./TagList";
+import ViewerAvatars from "./ViewerAvatars";
 
 const PuzzleDiv = styled.div<{
   $solvedness: Solvedness;
@@ -274,11 +275,19 @@ const Puzzle = React.memo(
         </PuzzleTitleColumn>
         <PuzzleActivityColumn>
           {solvedness === "unsolved" && (
-            <PuzzleActivity
-              huntId={puzzle.hunt}
-              puzzleId={puzzle._id}
-              unlockTime={puzzle.createdAt}
-            />
+            <>
+              <ViewerAvatars
+                puzzleId={puzzle._id}
+                maxDisplay={3}
+                size={20}
+                showCount={false}
+              />
+              <PuzzleActivity
+                huntId={puzzle.hunt}
+                puzzleId={puzzle._id}
+                unlockTime={puzzle.createdAt}
+              />
+            </>
           )}
         </PuzzleActivityColumn>
         <PuzzleLinkColumn>

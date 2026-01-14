@@ -9,6 +9,17 @@ const AvatarImg = styled.img`
   height: 100%;
 `;
 
+const GoogleAvatarInner = ({
+  displayName,
+  googleProfilePicture,
+}: {
+  displayName?: string;
+  googleProfilePicture: string;
+}) => {
+  const alt = `${displayName ?? "Anonymous user"}'s Google avatar`;
+  return <AvatarImg alt={alt} src={googleProfilePicture} />;
+};
+
 const DiscordAvatarInner = ({
   size,
   displayName,
@@ -106,6 +117,7 @@ const Avatar = React.memo(
     inline,
     _id,
     displayName,
+    googleProfilePicture,
     discordAccount,
     className,
     isSelf = false,
@@ -114,20 +126,32 @@ const Avatar = React.memo(
     inline?: boolean;
     _id?: string; // hashed to produce a globally consistant background color for the fallback avatar
     displayName?: string;
+    googleProfilePicture?: string;
     discordAccount?: DiscordAccountType;
     className?: string;
     isSelf?: boolean;
   }) => {
-    const content =
-      discordAccount && getAvatarCdnUrl(discordAccount) ? (
+    // Priority: Google > Discord > Default initials
+    let content;
+    if (googleProfilePicture) {
+      content = (
+        <GoogleAvatarInner
+          displayName={displayName}
+          googleProfilePicture={googleProfilePicture}
+        />
+      );
+    } else if (discordAccount && getAvatarCdnUrl(discordAccount)) {
+      content = (
         <DiscordAvatarInner
           size={size}
           displayName={displayName}
           discordAccount={discordAccount}
         />
-      ) : (
-        <DefaultAvatarInner _id={_id} displayName={displayName} />
       );
+    } else {
+      content = <DefaultAvatarInner _id={_id} displayName={displayName} />;
+    }
+
     return (
       <AvatarContainer
         className={className}

@@ -57,6 +57,9 @@ const ChatMessage = withCommon(
     content: ChatMessageContent,
     // If absent, this message is considered a "system" message
     sender: foreignKey.optional(),
+    // If present, this message is only visible to the specified recipient
+    // Used for private command responses
+    recipient: foreignKey.optional(),
     // The date this message was sent.  Used for ordering chats in the log.
     timestamp: z.date(),
   }),
@@ -64,6 +67,7 @@ const ChatMessage = withCommon(
 const ChatMessages = new SoftDeletedModel("jr_chatmessages", ChatMessage);
 ChatMessages.addIndex({ deleted: 1, puzzle: 1 });
 ChatMessages.addIndex({ hunt: 1, createdAt: 1 });
+ChatMessages.addIndex({ recipient: 1 }); // For filtering private messages
 export type ChatMessageType = ModelType<typeof ChatMessages>;
 
 export default ChatMessages;
