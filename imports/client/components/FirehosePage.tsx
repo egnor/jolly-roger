@@ -195,7 +195,7 @@ const FirehosePage = () => {
       loading
         ? undefined
         : ChatMessages.find(
-            { hunt: huntId },
+            { hunt: huntId, recipient: { $exists: false } },
             { sort: { timestamp: 1 } },
           ).fetch(),
     [loading, huntId],

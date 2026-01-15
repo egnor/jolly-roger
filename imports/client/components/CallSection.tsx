@@ -27,7 +27,6 @@ import MeteorUsers from "../../lib/models/MeteorUsers";
 import type { PeerType } from "../../lib/models/mediasoup/Peers";
 import mediasoupRemoteMutePeer from "../../methods/mediasoupRemoteMutePeer";
 import type { Action, CallState } from "../hooks/useCallState";
-import Avatar from "./Avatar";
 import Loading from "./Loading";
 import Spectrum from "./Spectrum";
 import {
@@ -38,6 +37,55 @@ import {
   PeopleItemDiv,
   PeopleListDiv,
 } from "./styling/PeopleComponents";
+
+const CallerChip = styled.div<{ $isSelf?: boolean }>`
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  max-width: 200px;
+  min-width: 0;
+  background-color: ${(props) => (props.$isSelf ? "#d4edda" : "#e7f3ff")};
+  color: ${(props) => (props.$isSelf ? "#155724" : "#004085")};
+  border: 1px solid ${(props) => (props.$isSelf ? "#c3e6cb" : "#b3d9ff")};
+
+  > * {
+    position: relative;
+    z-index: 2;
+    flex-shrink: 0;
+  }
+`;
+
+const StatusDot = styled.span<{ $isSelf?: boolean }>`
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background-color: ${(props) => (props.$isSelf ? "#28a745" : "#007bff")};
+`;
+
+const CallerName = styled.span`
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  max-width: 150px;
+  flex-shrink: 1;
+`;
+
+const SpectrumOverlay = styled.div`
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  border-radius: 4px;
+  overflow: hidden;
+  z-index: 1;
+`;
 
 const CallStateIcon = styled.span`
   font-size: 10px;
@@ -134,16 +182,34 @@ const SelfBox = ({
   popperBoundaryRef: React.RefObject<HTMLElement | null>;
 }) => {
   const spectraDisabled = useTracker(() => Flags.active("disable.spectra"));
-  const { userId, name, discordAccount } = useTracker(() => {
+  const { name } = useTracker(() => {
     const user = Meteor.user()!;
     return {
-      userId: user._id,
       name: user.displayName,
-      discordAccount: user.discordAccount,
     };
   });
 
   const tooltipId = useId();
+  const chipRef = useRef<HTMLDivElement>(null);
+  const [chipDimensions, setChipDimensions] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    if (chipRef.current) {
+      const updateDimensions = () => {
+        if (chipRef.current) {
+          const rect = chipRef.current.getBoundingClientRect();
+          setChipDimensions({
+            width: Math.round(rect.width),
+            height: Math.round(rect.height)
+          });
+        }
+      };
+      updateDimensions();
+      // Update on resize
+      window.addEventListener("resize", updateDimensions);
+      return () => window.removeEventListener("resize", updateDimensions);
+    }
+  }, [name, muted, deafened]);
 
   return (
     <OverlayTrigger
@@ -172,34 +238,44 @@ const SelfBox = ({
         </Tooltip>
       }
     >
-      <PeopleItemDiv>
-        <Avatar
-          _id={userId}
-          displayName={name}
-          discordAccount={discordAccount}
-          size={44}
-          isSelf
-        />
-        <div>
-          {muted && (
-            <MutedIcon>
-              <FontAwesomeIcon icon={faMicrophoneSlash} />
-            </MutedIcon>
-          )}
-          {deafened && (
-            <DeafenedIcon>
-              <FontAwesomeIcon icon={faVolumeMute} />
-            </DeafenedIcon>
-          )}
-          {!spectraDisabled && !muted && !deafened ? (
+      <PeopleItemDiv
+        style={{
+          width: "auto",
+          height: "auto",
+          position: "relative",
+          background: "transparent",
+          justifyContent: "flex-start",
+        }}
+      >
+        <CallerChip $isSelf ref={chipRef}>
+          <StatusDot $isSelf />
+          <CallerName>{name || "You"}</CallerName>
+        </CallerChip>
+        {!spectraDisabled && !muted && !deafened && chipDimensions.width > 0 && (
+          <SpectrumOverlay
+            style={{
+              width: `${chipDimensions.width}px`,
+              height: `${chipDimensions.height}px`,
+            }}
+          >
             <Spectrum
-              width={44}
-              height={44}
+              width={chipDimensions.width}
+              height={chipDimensions.height}
               audioContext={audioContext}
               stream={stream}
             />
-          ) : null}
-        </div>
+          </SpectrumOverlay>
+        )}
+        {muted && (
+          <MutedIcon>
+            <FontAwesomeIcon icon={faMicrophoneSlash} />
+          </MutedIcon>
+        )}
+        {deafened && (
+          <DeafenedIcon>
+            <FontAwesomeIcon icon={faVolumeMute} />
+          </DeafenedIcon>
+        )}
       </PeopleItemDiv>
     </OverlayTrigger>
   );
@@ -329,14 +405,13 @@ const PeerBox = ({
 }) => {
   const spectraDisabled = useTracker(() => Flags.active("disable.spectra"));
   const audioRef = React.createRef<HTMLAudioElement>();
-  const { userId, name, discordAccount } = useTracker(() => {
+  const { name } = useTracker(() => {
     const user = MeteorUsers.findOne(peer.createdBy);
     return {
-      userId: user?._id,
       name: user?.displayName,
-      discordAccount: user?.discordAccount,
     };
   }, [peer.createdBy]);
+
   useEffect(() => {
     if (audioRef.current) {
       if (stream) {
@@ -377,6 +452,27 @@ const PeerBox = ({
     }
   }, [isLocalMuted, audioRef, stream]);
 
+  const chipRef = useRef<HTMLDivElement>(null);
+  const [chipDimensions, setChipDimensions] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    if (chipRef.current) {
+      const updateDimensions = () => {
+        if (chipRef.current) {
+          const rect = chipRef.current.getBoundingClientRect();
+          setChipDimensions({
+            width: Math.round(rect.width),
+            height: Math.round(rect.height)
+          });
+        }
+      };
+      updateDimensions();
+      // Update on resize
+      window.addEventListener("resize", updateDimensions);
+      return () => window.removeEventListener("resize", updateDimensions);
+    }
+  }, [name, muted, stream]);
+
   return (
     <>
       {renderMuteModal && (
@@ -413,46 +509,58 @@ const PeerBox = ({
           </ChatterTooltip>
         }
       >
-        <PeopleItemDiv>
-          <Avatar
-            _id={userId}
-            displayName={name}
-            discordAccount={discordAccount}
-            size={44}
-          />
-          <div>
-            {muted && (
-              <MutedIcon>
-                <FontAwesomeIcon icon={faMicrophoneSlash} />
-              </MutedIcon>
-            )}
-            {!muted && isLocalMuted && (
-              <MutedIcon $local>
-                <FontAwesomeIcon icon={faMicrophoneSlash} />
-              </MutedIcon>
-            )}
-            {deafened && (
-              <DeafenedIcon>
-                <FontAwesomeIcon icon={faVolumeMute} />
-              </DeafenedIcon>
-            )}
-            {!spectraDisabled &&
-            !muted &&
-            stream &&
-            stream.getTracks().length > 0 ? (
-              <Spectrum
-                width={44}
-                height={44}
-                audioContext={audioContext}
-                stream={stream}
-              />
-            ) : null}
+        <PeopleItemDiv
+          style={{
+            width: "auto",
+            height: "auto",
+            position: "relative",
+            background: "transparent",
+            justifyContent: "flex-start",
+          }}
+        >
+          <CallerChip ref={chipRef}>
+            <StatusDot />
+            <CallerName>{name || "Unknown"}</CallerName>
             {!muted && (
               <PeerMuteButton onClick={showMuteModal}>
                 <FontAwesomeIcon icon={faMicrophoneSlash} />
               </PeerMuteButton>
             )}
-          </div>
+          </CallerChip>
+          {!spectraDisabled &&
+          !muted &&
+          stream &&
+          stream.getTracks().length > 0 &&
+          chipDimensions.width > 0 && (
+            <SpectrumOverlay
+              style={{
+                width: `${chipDimensions.width}px`,
+                height: `${chipDimensions.height}px`,
+              }}
+            >
+              <Spectrum
+                width={chipDimensions.width}
+                height={chipDimensions.height}
+                audioContext={audioContext}
+                stream={stream}
+              />
+            </SpectrumOverlay>
+          )}
+          {muted && (
+            <MutedIcon>
+              <FontAwesomeIcon icon={faMicrophoneSlash} />
+            </MutedIcon>
+          )}
+          {!muted && isLocalMuted && (
+            <MutedIcon $local>
+              <FontAwesomeIcon icon={faMicrophoneSlash} />
+            </MutedIcon>
+          )}
+          {deafened && (
+            <DeafenedIcon>
+              <FontAwesomeIcon icon={faVolumeMute} />
+            </DeafenedIcon>
+          )}
           <audio autoPlay muted={selfDeafened || isLocalMuted} ref={audioRef} />
         </PeopleItemDiv>
       </OverlayTrigger>

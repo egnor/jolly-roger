@@ -83,6 +83,10 @@ const PuzzleTitleColumn = styled(PuzzleColumn)`
 const PuzzleActivityColumn = styled(PuzzleColumn)`
   width: 11rem;
   text-align: right;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
   ${mediaBreakpointDown(
     "xs",
     css`

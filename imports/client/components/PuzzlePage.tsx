@@ -420,10 +420,19 @@ const ChatHistory = React.forwardRef(
   ) => {
     // TODO: consider using useFind once fixed upstream
     const chatMessages: FilteredChatMessageType[] = useTracker(() => {
-      return ChatMessages.find(
+      const currentUserId = Meteor.userId();
+      const messages = ChatMessages.find(
         { puzzle: puzzleId },
         { sort: { timestamp: 1 } },
       ).fetch();
+
+      // Filter messages: show all public messages and private messages for current user
+      return messages.filter((msg) => {
+        // Show if no recipient (public message)
+        if (!msg.recipient) return true;
+        // Show if recipient is current user
+        return msg.recipient === currentUserId;
+      });
     }, [puzzleId]);
 
     const ref = useRef<HTMLDivElement>(null);
@@ -666,12 +675,22 @@ const ChatInput = React.memo(
 
     const [content, setContent] = useState<Descendant[]>(initialValue);
     const fancyEditorRef = useRef<FancyEditorHandle | null>(null);
+
+    // Chat history state
+    const messageHistoryRef = useRef<Descendant[][]>([]);
+    const [historyIndex, setHistoryIndex] = useState<number>(-1);
+    const isNavigatingHistoryRef = useRef<boolean>(false);
+
     const onContentChange = useCallback(
       (newContent: Descendant[]) => {
         setContent(newContent);
         onHeightChangeCb(0);
+        // Reset history navigation when user types (but not when we're actively navigating)
+        if (historyIndex !== -1 && !isNavigatingHistoryRef.current) {
+          setHistoryIndex(-1);
+        }
       },
-      [onHeightChangeCb],
+      [onHeightChangeCb, historyIndex],
     );
     const hasNonTrivialContent = useMemo(() => {
       return (
@@ -742,6 +761,11 @@ const ChatInput = React.memo(
               }
             }),
         };
+
+        // Save to message history (keep last 50 messages)
+        const newHistory = [content, ...messageHistoryRef.current];
+        messageHistoryRef.current = newHistory.slice(0, 50);
+        setHistoryIndex(-1);
 
         // Send chat message.
         sendChatMessage.call({
@@ -839,6 +863,54 @@ const ChatInput = React.memo(
       [],
     );
 
+    const handleNavigateHistory = useCallback((direction: "up" | "down") => {
+      isNavigatingHistoryRef.current = true;
+      setHistoryIndex((currentIndex) => {
+        const currentHistory = messageHistoryRef.current;
+        const newIndex =
+          direction === "up" ? currentIndex + 1 : currentIndex - 1;
+
+        if (direction === "up") {
+          // Navigate to older messages
+          if (newIndex < currentHistory.length) {
+            const historicalMessage = currentHistory[newIndex]!;
+            fancyEditorRef.current?.setContent(historicalMessage);
+            setContent(historicalMessage);
+            // Reset flag after state updates have processed
+            setTimeout(() => {
+              isNavigatingHistoryRef.current = false;
+            }, 0);
+            return newIndex;
+          }
+          isNavigatingHistoryRef.current = false;
+          return currentIndex; // Don't change index if we can't navigate further
+        } else {
+          // Navigate to newer messages
+          if (newIndex >= 0) {
+            const historicalMessage = currentHistory[newIndex]!;
+            fancyEditorRef.current?.setContent(historicalMessage);
+            setContent(historicalMessage);
+            // Reset flag after state updates have processed
+            setTimeout(() => {
+              isNavigatingHistoryRef.current = false;
+            }, 0);
+            return newIndex;
+          } else if (newIndex === -1) {
+            // Back to current (empty) message
+            fancyEditorRef.current?.clearInput();
+            setContent(initialValue);
+            // Reset flag after state updates have processed
+            setTimeout(() => {
+              isNavigatingHistoryRef.current = false;
+            }, 0);
+            return -1;
+          }
+          isNavigatingHistoryRef.current = false;
+          return currentIndex; // Don't change index if we can't navigate further
+        }
+      });
+    }, []);
+
     const errorModal = (
       <Modal show onHide={clearUploadImageError}>
         <Modal.Header closeButton>Error uploading image to chat</Modal.Header>
@@ -866,6 +938,7 @@ const ChatInput = React.memo(
             onSubmit={sendContentMessage}
             uploadImageFile={uploadImageFile}
             disabled={disabled}
+            onNavigateHistory={handleNavigateHistory}
           />
           <Button
             variant="secondary"
@@ -1141,10 +1214,9 @@ const PuzzlePageMetadata = ({
       <InsertImage documentId={document._id} />
     );
 
-  const documentLink =
-    document && !isDesktop ? (
-      <DocumentDisplay document={document} displayMode="link" user={selfUser} />
-    ) : null;
+  const documentLink = document ? (
+    <DocumentDisplay document={document} displayMode="link" user={selfUser} />
+  ) : null;
 
   const editButton = canUpdate ? (
     <Button
@@ -2021,11 +2093,35 @@ const PuzzlePage = React.memo(() => {
   const puzzleId = useParams<"puzzleId">().puzzleId!;
   const idPrefix = useId();
 
+  // Track visibility of the puzzle page tab
+  const [isVisible, setIsVisible] = useState<DocumentVisibilityState>(
+    window.document.visibilityState,
+  );
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      setIsVisible(window.document.visibilityState);
+    };
+
+    window.document.addEventListener(
+      "visibilitychange",
+      handleVisibilityChange,
+    );
+
+    return () => {
+      window.document.removeEventListener(
+        "visibilitychange",
+        handleVisibilityChange,
+      );
+    };
+  }, []);
+
   // Add the current user to the collection of people viewing this puzzle.
   const subscribersTopic = `puzzle:${puzzleId}`;
   useSubscribe("subscribers.inc", subscribersTopic, {
     puzzle: puzzleId,
     hunt: huntId,
+    visible: isVisible,
   });
 
   // Get the _list_ of subscribers to this puzzle and the _count_ of subscribers

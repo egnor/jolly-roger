@@ -132,26 +132,81 @@ Meteor.publish("subscribers.fetch", async function (name) {
     return [];
   }
 
-  const users: Record<string, number> = {};
+  // Track aggregated state per user (multiple connections)
+  const users: Record<
+    string,
+    {
+      count: number;
+      visible: boolean;
+      updatedAt: Date;
+    }
+  > = {};
+
+  const publishUser = (userId: string) => {
+    const state = users[userId]!;
+    this.changed("subscribers", `${name}:${userId}`, {
+      name,
+      user: userId,
+      visible: state.visible,
+      updatedAt: state.updatedAt,
+    });
+  };
 
   const cursor = Subscribers.find({ name });
   const handle = await cursor.observeAsync({
     added: (doc) => {
-      const { user } = doc;
+      const { user, context, updatedAt } = doc;
+      const visible = context?.visible === "visible";
 
       if (!Object.hasOwn(users, user)) {
-        users[user] = 0;
-        this.added("subscribers", `${name}:${user}`, { name, user });
+        users[user] = {
+          count: 0,
+          visible: false,
+          updatedAt: updatedAt || new Date(),
+        };
+        this.added("subscribers", `${name}:${user}`, {
+          name,
+          user,
+          visible: false,
+          updatedAt: updatedAt || new Date(),
+        });
       }
 
-      users[user]! += 1;
+      const state = users[user]!;
+      state.count += 1;
+
+      // Aggregate: visible if ANY connection is visible
+      state.visible = state.visible || visible;
+
+      // Use most recent updatedAt
+      if (updatedAt && updatedAt > state.updatedAt) {
+        state.updatedAt = updatedAt;
+      }
+
+      publishUser(user);
+    },
+
+    changed: (doc) => {
+      const { user, context, updatedAt } = doc;
+      if (!Object.hasOwn(users, user)) return;
+
+      const state = users[user]!;
+      const visible = context?.visible === "visible";
+
+      // Re-aggregate visibility and timestamp
+      state.visible = visible;
+      if (updatedAt && updatedAt > state.updatedAt) {
+        state.updatedAt = updatedAt;
+      }
+
+      publishUser(user);
     },
 
     removed: (doc) => {
       const { user } = doc;
 
-      users[user]! -= 1;
-      if (users[user] === 0) {
+      users[user]!.count -= 1;
+      if (users[user]!.count === 0) {
         delete users[user];
         this.removed("subscribers", `${name}:${user}`);
       }

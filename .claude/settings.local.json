@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(meteor npm run lint:types:*)",
+      "Bash(meteor npm run lint:biome:*)",
+      "Bash(meteor npm run lint:eslint:*)",
+      "Bash(meteor node:*)",
+      "Bash(meteor mongo:*)",
+      "Bash(npm run lint:biome:*)",
+      "Bash(npm run lint:*)",
+      "Bash(npm run lint:biome:check:*)",
+      "Bash(npm run lint:types:*)",
+      "Bash(ls:*)",
+      "Bash(grep:*)"
+    ]
+  }
+}

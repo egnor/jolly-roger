@@ -21,6 +21,9 @@ const Subscribers = new Model("jr_subscribers", Subscriber);
 Subscribers.addIndex({ server: 1 });
 Subscribers.addIndex({ "context.hunt": 1 });
 Subscribers.addIndex({ name: 1 });
+// Compound index for efficient viewer filtering queries
+// Supports queries like: find({ name: "puzzle:xyz", user: "abc123" })
+Subscribers.addIndex({ name: 1, user: 1 });
 export type SubscriberType = ModelType<typeof Subscribers>;
 
 export default Subscribers;
