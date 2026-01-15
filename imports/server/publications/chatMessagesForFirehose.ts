@@ -24,7 +24,7 @@ definePublication(chatMessagesForFirehose, {
     }
 
     return [
-      ChatMessages.find({ hunt: huntId }),
+      ChatMessages.find({ hunt: huntId, recipient: { $exists: false } }),
       Puzzles.findAllowingDeleted({ hunt: huntId }),
     ];
   },

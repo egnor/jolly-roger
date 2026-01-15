@@ -6,6 +6,7 @@ import { faFilePen } from "@fortawesome/free-solid-svg-icons/faFilePen";
 import { faPeopleGroup } from "@fortawesome/free-solid-svg-icons/faPeopleGroup";
 import { faPhoneVolume } from "@fortawesome/free-solid-svg-icons/faPhoneVolume";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import type { ComponentPropsWithRef, FC } from "react";
 import { useEffect, useId, useState } from "react";
 import OverlayTrigger from "react-bootstrap/OverlayTrigger";
 import Tooltip from "react-bootstrap/Tooltip";
@@ -22,6 +23,19 @@ import ActivityBuckets from "../ActivityBuckets";
 import RelativeTime from "./RelativeTime";
 import { mediaBreakpointDown } from "./styling/responsive";
 import ViewerAvatars from "./ViewerAvatars";
+
+const OpaqueTooltip: FC<ComponentPropsWithRef<typeof Tooltip>> = styled(
+  Tooltip,
+)`
+  & .tooltip-inner {
+    background-color: rgb(0 0 0 / 95%);
+    max-width: 350px;
+  }
+
+  & .tooltip-arrow::before {
+    border-color: rgb(0 0 0 / 95%);
+  }
+`;
 
 const PuzzleActivityItems = styled.span`
   font-size: 14px;
@@ -185,7 +199,7 @@ const PuzzleActivity = ({
   };
 
   const sparklineTooltip = (
-    <Tooltip id={`${idPrefix}-sparkline`}>
+    <OpaqueTooltip id={`${idPrefix}-sparkline`}>
       <div>People working on this puzzle:</div>
       {showViewers && (
         <div style={{ marginTop: "0.5rem", marginBottom: "0.5rem" }}>
@@ -248,7 +262,7 @@ const PuzzleActivity = ({
         </div>
         <div>{displayNumber(documents)}</div>
       </PuzzleActivityDetail>
-    </Tooltip>
+    </OpaqueTooltip>
   );
 
   return (

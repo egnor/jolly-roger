@@ -1,7 +1,8 @@
 import { Meteor } from "meteor/meteor";
 import { useTracker } from "meteor/react-meteor-data";
 import { faCaretDown } from "@fortawesome/free-solid-svg-icons/faCaretDown";
-import { faEraser } from "@fortawesome/free-solid-svg-icons/faEraser";
+import { faCaretRight } from "@fortawesome/free-solid-svg-icons/faCaretRight";
+import { faCircleXmark } from "@fortawesome/free-solid-svg-icons/faCircleXmark";
 import { faPlus } from "@fortawesome/free-solid-svg-icons/faPlus";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
@@ -13,7 +14,6 @@ import {
 } from "react";
 import Alert from "react-bootstrap/Alert";
 import Button from "react-bootstrap/Button";
-import ButtonToolbar from "react-bootstrap/ButtonToolbar";
 import type { FormControlProps } from "react-bootstrap/FormControl";
 import FormControl from "react-bootstrap/FormControl";
 import FormGroup from "react-bootstrap/FormGroup";
@@ -63,58 +63,167 @@ import RelatedPuzzleGroup, { PuzzleGroupDiv } from "./RelatedPuzzleGroup";
 import RelatedPuzzleList from "./RelatedPuzzleList";
 import { mediaBreakpointDown } from "./styling/responsive";
 
-const ViewControls = styled.div<{ $canAdd?: boolean }>`
-  display: grid;
-  grid-template-columns: auto auto auto 1fr;
-  align-items: end;
-  gap: 1em;
-  margin-bottom: 1em;
-  ${(props) =>
-    props.$canAdd &&
-    mediaBreakpointDown(
-      "xs",
-      css`
-        grid-template-columns: 1fr 1fr;
-      `,
-    )}
+const SectionHeader = styled.div`
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 0.5em;
+  color: ${(props) => props.theme.colors.text};
+`;
 
-  @media (width < 360px) {
-    /* For very narrow viewports (like iPad Split View) */
-    grid-template-columns: 100%;
-  }
+const FiltersContainer = styled.div`
+  background-color: ${(props) =>
+    props.theme.basicMode === "dark" ? "#2b2b2b" : "#f8f9fa"};
+  border: 1px solid ${(props) => props.theme.colors.border};
+  border-radius: 3px;
+  padding: 0.5em 0.75em;
+  margin-bottom: 0.75em;
 
   .btn {
-    /* Inputs and Button Toolbars are not quite the same height */
-    padding-top: 7px;
-    padding-bottom: 7px;
+    padding: 3px 6px;
+    font-size: 0.8125rem;
+  }
+
+  .form-label {
+    margin-bottom: 0.15rem;
+    font-size: 0.8125rem;
+  }
+
+  .form-control,
+  .form-select {
+    padding: 3px 6px;
+    font-size: 0.8125rem;
   }
 `;
 
-const SearchFormGroup = styled(FormGroup)<{ $canAdd?: boolean }>`
-  grid-column: ${(props) => (props.$canAdd ? 1 : 3)} / -1;
+const ViewControls = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+`;
+
+const TopRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 1.5em;
+  flex-wrap: wrap;
+
   ${mediaBreakpointDown(
     "sm",
     css`
-      grid-column: 1 / -1;
+      gap: 1em;
     `,
   )}
 `;
 
-const SearchFormLabel = styled(FormLabel)<{ $canAdd?: boolean }>`
-  display: ${(props) => (props.$canAdd ? "none" : "inline-block")};
+const SearchContainer = styled.div`
+  flex: 1;
+  min-width: 250px;
+`;
+
+const ControlGroup = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  font-size: 0.875rem;
+  white-space: nowrap;
+`;
+
+const ControlLabel = styled.span`
+  color: ${(props) => props.theme.colors.text};
+  font-weight: 500;
+  white-space: nowrap;
+`;
+
+const BottomRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 1em;
+  font-size: 0.8125rem;
+  flex-wrap: wrap;
+`;
+
+const RightControls = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.75em;
+  margin-left: auto;
+
   ${mediaBreakpointDown(
     "sm",
     css`
-      display: none;
+      margin-left: 0;
+      width: 100%;
+      justify-content: flex-start;
     `,
   )}
+`;
+
+const SearchFormGroup = styled(FormGroup)`
+  margin-bottom: 0;
+  width: 100%;
+`;
+
+const ViewerFilterGroup = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  white-space: nowrap;
+`;
+
+const SearchFormLabel = styled(FormLabel)`
+  display: none;
+`;
+
+const ClearSearchButton = styled.button`
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: #6c757d;
+  font-size: 1rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  z-index: 10;
+
+  &:hover {
+    color: #495057;
+  }
+
+  &:focus {
+    outline: none;
+  }
+`;
+
+const SearchInputGroup = styled(InputGroup)`
+  position: relative;
+
+  .form-control {
+    padding-right: 2rem;
+
+    &::placeholder {
+      color: #adb5bd;
+      font-style: italic;
+      opacity: 1;
+    }
+  }
 `;
 
 const ViewerFilterChips = styled.div`
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
+  gap: 0.25rem;
+  margin-top: 0.25rem;
+`;
+
+const CompactFormSelect = styled(FormSelect)`
+  padding: 3px 6px;
+  font-size: 0.8125rem;
+  min-width: 150px;
 `;
 
 const ViewerChip = styled.span<{
@@ -123,14 +232,14 @@ const ViewerChip = styled.span<{
 }>`
   display: inline-flex;
   align-items: center;
-  gap: 0.375rem;
+  gap: 0.25rem;
   cursor: pointer;
-  padding: 0.375rem 0.625rem;
-  border-radius: 4px;
-  font-size: 0.875rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 3px;
+  font-size: 0.8125rem;
   font-weight: normal;
   transition: all 0.2s ease;
-  max-width: 200px;
+  max-width: 180px;
   min-width: 0;
   background-color: ${(props) => {
     if (props.$active) {
@@ -211,8 +320,8 @@ const ViewerChip = styled.span<{
 
 const StatusDot = styled.span<{ $status: "active" | "idle" | "away" }>`
   display: inline-block;
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   flex-shrink: 0;
   background-color: ${(props) => {
@@ -234,7 +343,7 @@ const ViewerFilterName = styled.span`
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
-  max-width: 150px;
+  max-width: 140px;
   flex-shrink: 1;
 `;
 
@@ -242,7 +351,7 @@ const OperatorActionsFormGroup = styled(FormGroup)`
   ${mediaBreakpointDown(
     "xs",
     css`
-      order: -1;
+      grid-column: 1;
     `,
   )}
 `;
@@ -252,14 +361,9 @@ const AddPuzzleFormGroup = styled(FormGroup)`
   ${mediaBreakpointDown(
     "xs",
     css`
-      justify-self: auto;
-      order: -1;
+      justify-self: start;
     `,
   )}
-
-  @media (width < 360px) {
-    order: -2;
-  }
 `;
 
 const StyledToggleButtonGroup = styled(ToggleButtonGroup)`
@@ -274,11 +378,53 @@ const StyledButton: FC<ComponentPropsWithRef<typeof Button>> = styled(Button)`
   }
 `;
 
+const BookmarkedSection = styled.div`
+  background-color: ${(props) =>
+    props.theme.basicMode === "dark" ? "#4a4020" : "#fff3cd"};
+  border: 1px solid
+    ${(props) => (props.theme.basicMode === "dark" ? "#8a7a40" : "#ffe69c")};
+  border-radius: 3px;
+  padding: 0.5em 0.75em;
+  margin-bottom: 0.75em;
+
+  ${PuzzleGroupDiv} {
+    margin-bottom: 0;
+  }
+`;
+
+const MainPuzzleListSection = styled.div`
+  background-color: ${(props) => props.theme.colors.background};
+  border: 1px solid ${(props) => props.theme.colors.border};
+  border-radius: 3px;
+  padding: 0.5em 0.75em;
+
+  ${PuzzleGroupDiv} {
+    padding-left: 0.5em;
+    border-left: 2px solid ${(props) => props.theme.colors.border};
+    margin-left: 0.25em;
+
+    &:not(:last-child) {
+      margin-bottom: 0.75em;
+    }
+  }
+`;
+
 const PuzzleListToolbar = styled.div`
   display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  margin-bottom: 0.5em;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.5em;
+  font-size: 0.8125rem;
+  color: ${(props) =>
+    props.theme.basicMode === "dark" ? "#adb5bd" : "#6c757d"};
+`;
+
+const ExpandCollapseButton = styled(Button)`
+  font-size: 0.75rem;
+  padding: 0.125rem 0.375rem;
+  line-height: 1.2;
+  margin-left: 0.25rem;
 `;
 
 const HuntNavWrapper = styled.div`
@@ -347,9 +493,19 @@ const PuzzleListView = ({
   const expandAllGroups = useCallback(() => {
     setHuntPuzzleListCollapseGroups({});
   }, [setHuntPuzzleListCollapseGroups]);
-  const canExpandAllGroups =
+
+  const collapseAllGroups = useCallback(() => {
+    // Get all group IDs and set them to collapsed
+    const allGroupIds = puzzleGroupsByRelevance(allPuzzles, allTags).map(
+      (g) => g.sharedTag?._id ?? "(no group specified)",
+    );
+    const collapsed = Object.fromEntries(allGroupIds.map((id) => [id, true]));
+    setHuntPuzzleListCollapseGroups(collapsed);
+  }, [allPuzzles, allTags, setHuntPuzzleListCollapseGroups]);
+
+  const allGroupsExpanded =
     displayMode === "group" &&
-    Object.values(huntPuzzleListCollapseGroups).some((collapsed) => collapsed);
+    Object.values(huntPuzzleListCollapseGroups).every((collapsed) => !collapsed);
 
   const [operatorActionsHidden, setOperatorActionsHidden] =
     useOperatorActionsHiddenForHunt(huntId);
@@ -411,17 +567,6 @@ const PuzzleListView = ({
       setSearchParams(u);
     },
     [searchParams, setSearchParams],
-  );
-
-  const toggleViewerFilter = useCallback(
-    (userId: string) => {
-      if (viewerFilter === userId) {
-        setViewerFilter("");
-      } else {
-        setViewerFilter(userId);
-      }
-    },
-    [viewerFilter, setViewerFilter],
   );
 
   const onSearchStringChange: NonNullable<FormControlProps["onChange"]> =
@@ -609,14 +754,19 @@ const PuzzleListView = ({
             );
           });
           listControls = (
-            <Button
-              variant="secondary"
+            <ExpandCollapseButton
+              variant="outline-secondary"
               size="sm"
-              disabled={!canExpandAllGroups}
-              onClick={expandAllGroups}
+              onClick={allGroupsExpanded ? collapseAllGroups : expandAllGroups}
+              title={
+                allGroupsExpanded ? "Collapse all groups" : "Expand all groups"
+              }
             >
-              <FontAwesomeIcon icon={faCaretDown} /> Expand all
-            </Button>
+              <FontAwesomeIcon
+                icon={allGroupsExpanded ? faCaretDown : faCaretRight}
+              />{" "}
+              {allGroupsExpanded ? "Collapse all" : "Expand all"}
+            </ExpandCollapseButton>
           );
           break;
         }
@@ -642,39 +792,44 @@ const PuzzleListView = ({
       return (
         <div>
           {maybeMatchWarning}
-          <PuzzleListToolbar>
-            <div>{listControls}</div>
-            <div>{filterMessage}</div>
-          </PuzzleListToolbar>
           {bookmarkedPuzzles.length > 0 && (
-            <PuzzleGroupDiv>
-              <div>Bookmarked</div>
-              <RelatedPuzzleList
-                key="bookmarked"
-                relatedPuzzles={bookmarkedPuzzles}
-                sharedTag={undefined}
+            <BookmarkedSection>
+              <SectionHeader>Bookmarked</SectionHeader>
+              <PuzzleGroupDiv>
+                <RelatedPuzzleList
+                  key="bookmarked"
+                  relatedPuzzles={bookmarkedPuzzles}
+                  sharedTag={undefined}
+                  bookmarked={bookmarked}
+                  allTags={allTags}
+                  canUpdate={canUpdate}
+                  suppressedTagIds={[]}
+                />
+              </PuzzleGroupDiv>
+            </BookmarkedSection>
+          )}
+          <MainPuzzleListSection>
+            <SectionHeader>Puzzles</SectionHeader>
+            <PuzzleListToolbar>
+              <div>{filterMessage}</div>
+              {listControls}
+            </PuzzleListToolbar>
+            {listComponent}
+            {retainedDeletedPuzzles && retainedDeletedPuzzles.length > 0 && (
+              <RelatedPuzzleGroup
+                key="deleted"
+                huntId={huntId}
+                group={{ puzzles: retainedDeletedPuzzles, subgroups: [] }}
+                noSharedTagLabel="Deleted puzzles (operator only)"
                 bookmarked={bookmarked}
                 allTags={allTags}
+                includeCount={false}
                 canUpdate={canUpdate}
                 suppressedTagIds={[]}
+                trackPersistentExpand={searchString === ""}
               />
-            </PuzzleGroupDiv>
-          )}
-          {listComponent}
-          {retainedDeletedPuzzles && retainedDeletedPuzzles.length > 0 && (
-            <RelatedPuzzleGroup
-              key="deleted"
-              huntId={huntId}
-              group={{ puzzles: retainedDeletedPuzzles, subgroups: [] }}
-              noSharedTagLabel="Deleted puzzles (operator only)"
-              bookmarked={bookmarked}
-              allTags={allTags}
-              includeCount={false}
-              canUpdate={canUpdate}
-              suppressedTagIds={[]}
-              trackPersistentExpand={searchString === ""}
-            />
-          )}
+            )}
+          </MainPuzzleListSection>
         </div>
       );
     },
@@ -685,55 +840,48 @@ const PuzzleListView = ({
       allTags,
       canUpdate,
       searchString,
-      canExpandAllGroups,
+      allGroupsExpanded,
       expandAllGroups,
+      collapseAllGroups,
       bookmarked,
     ],
   );
 
   const idPrefix = useId();
 
-  const addPuzzleContent = canAdd && (
-    <>
-      <PuzzleModalForm
-        huntId={huntId}
-        tags={allTags}
-        ref={addModalRef}
-        onSubmit={onAdd}
-      />
-      <OperatorActionsFormGroup>
-        <FormLabel>Operator Interface</FormLabel>
-        <ButtonToolbar>
-          <StyledToggleButtonGroup
-            type="radio"
-            name="operator-actions"
-            defaultValue="show"
-            value={operatorActionsHidden ? "hide" : "show"}
-            onChange={setOperatorActionsHiddenString}
-          >
-            <ToggleButton
-              id={`${idPrefix}-operator-actions-hide-button`}
-              variant="outline-info"
-              value="hide"
-            >
-              Off
-            </ToggleButton>
-            <ToggleButton
-              id={`${idPrefix}-operator-actions-show-button`}
-              variant="outline-info"
-              value="show"
-            >
-              On
-            </ToggleButton>
-          </StyledToggleButtonGroup>
-        </ButtonToolbar>
-      </OperatorActionsFormGroup>
-      <AddPuzzleFormGroup>
-        <StyledButton variant="primary" onClick={showAddModal}>
-          <FontAwesomeIcon icon={faPlus} /> Add a puzzle
-        </StyledButton>
-      </AddPuzzleFormGroup>
-    </>
+  const operatorModeToggle = canAdd && (
+    <ControlGroup>
+      <ControlLabel>Operator mode:</ControlLabel>
+      <StyledToggleButtonGroup
+        type="radio"
+        name="operator-actions"
+        value={operatorActionsHidden ? "hide" : "show"}
+        onChange={setOperatorActionsHiddenString}
+      >
+        <ToggleButton
+          id={`${idPrefix}-operator-actions-show-button`}
+          variant="outline-secondary"
+          value="show"
+          size="sm"
+        >
+          On
+        </ToggleButton>
+        <ToggleButton
+          id={`${idPrefix}-operator-actions-hide-button`}
+          variant="outline-secondary"
+          value="hide"
+          size="sm"
+        >
+          Off
+        </ToggleButton>
+      </StyledToggleButtonGroup>
+    </ControlGroup>
+  );
+
+  const addPuzzleButton = canAdd && (
+    <StyledButton variant="primary" onClick={showAddModal} size="sm">
+      <FontAwesomeIcon icon={faPlus} /> Add puzzle
+    </StyledButton>
   );
 
   const matchingSearch = puzzlesMatchingSearchString(allPuzzles);
@@ -756,126 +904,119 @@ const PuzzleListView = ({
 
   return (
     <div>
-      <ViewControls $canAdd={canAdd}>
-        <FormGroup>
-          <FormLabel>Organize by</FormLabel>
-          <ButtonToolbar>
+      {canAdd && (
+        <PuzzleModalForm
+          huntId={huntId}
+          tags={allTags}
+          ref={addModalRef}
+          onSubmit={onAdd}
+        />
+      )}
+      <FiltersContainer>
+        <SectionHeader>Filters</SectionHeader>
+        <ViewControls>
+        <TopRow>
+          <SearchContainer>
+            <SearchFormGroup controlId={`${idPrefix}-puzzle-search`}>
+              <SearchFormLabel>Search</SearchFormLabel>
+              <SearchInputGroup>
+                <FormControl
+                  as="input"
+                  type="text"
+                  ref={searchBarRef}
+                  placeholder="Search by name, answer, tag, etc."
+                  value={searchString}
+                  onChange={onSearchStringChange}
+                />
+                {searchString && (
+                  <ClearSearchButton
+                    type="button"
+                    onClick={clearSearch}
+                    aria-label="Clear search"
+                  >
+                    <FontAwesomeIcon icon={faCircleXmark} />
+                  </ClearSearchButton>
+                )}
+              </SearchInputGroup>
+            </SearchFormGroup>
+          </SearchContainer>
+          <ControlGroup>
+            <ControlLabel>Show:</ControlLabel>
+            <StyledToggleButtonGroup
+              type="radio"
+              name="show-solved"
+              value={showSolved ? "show" : "hide"}
+              onChange={setShowSolvedString}
+            >
+              <ToggleButton
+                id={`${idPrefix}-solved-show-button`}
+                variant="outline-secondary"
+                value="show"
+                size="sm"
+              >
+                All
+              </ToggleButton>
+              <ToggleButton
+                id={`${idPrefix}-solved-hide-button`}
+                variant="outline-secondary"
+                value="hide"
+                size="sm"
+              >
+                Unsolved
+              </ToggleButton>
+            </StyledToggleButtonGroup>
+          </ControlGroup>
+          <ControlGroup>
+            <ControlLabel>Organize by:</ControlLabel>
             <StyledToggleButtonGroup
               type="radio"
               name="puzzle-view"
-              defaultValue="group"
               value={displayMode}
               onChange={setDisplayMode}
             >
               <ToggleButton
                 id={`${idPrefix}-view-group-button`}
-                variant="outline-info"
+                variant="outline-secondary"
                 value="group"
+                size="sm"
               >
                 Group
               </ToggleButton>
               <ToggleButton
                 id={`${idPrefix}-view-unlock-button`}
-                variant="outline-info"
+                variant="outline-secondary"
                 value="unlock"
+                size="sm"
               >
                 Unlock
               </ToggleButton>
             </StyledToggleButtonGroup>
-          </ButtonToolbar>
-        </FormGroup>
-        <FormGroup>
-          <FormLabel>Solved puzzles</FormLabel>
-          <ButtonToolbar>
-            <StyledToggleButtonGroup
-              type="radio"
-              name="show-solved"
-              defaultValue="show"
-              value={showSolved ? "show" : "hide"}
-              onChange={setShowSolvedString}
+          </ControlGroup>
+        </TopRow>
+        <BottomRow>
+          <ViewerFilterGroup>
+            <ControlLabel>Filter by:</ControlLabel>
+            <CompactFormSelect
+              value={viewerFilter}
+              onChange={(e) => setViewerFilter(e.target.value)}
             >
-              <ToggleButton
-                id={`${idPrefix}-solved-hide-button`}
-                variant="outline-info"
-                value="hide"
-              >
-                Hidden
-              </ToggleButton>
-              <ToggleButton
-                id={`${idPrefix}-solved-show-button`}
-                variant="outline-info"
-                value="show"
-              >
-                Shown
-              </ToggleButton>
-            </StyledToggleButtonGroup>
-          </ButtonToolbar>
-        </FormGroup>
-        <FormGroup>
-          <FormLabel>Filter by viewer</FormLabel>
-          <FormSelect
-            value={viewerFilter}
-            onChange={(e) => setViewerFilter(e.target.value)}
-          >
-            <option value="">All puzzles</option>
-            {allViewers.map((viewer) => (
-              <option key={viewer.userId} value={viewer.userId}>
-                {viewer.displayName}
-              </option>
-            ))}
-          </FormSelect>
-          {allViewers.length > 0 && (
-            <ViewerFilterChips>
-              {allViewers.slice(0, 8).map((viewer) => (
-                <ViewerChip
-                  key={viewer.userId}
-                  $active={viewerFilter === viewer.userId}
-                  $status={viewer.status}
-                  onClick={() => toggleViewerFilter(viewer.userId)}
-                  title={
-                    viewerFilter === viewer.userId
-                      ? `Clear filter: ${viewer.displayName} (${viewer.status})`
-                      : `Filter to: ${viewer.displayName} (${viewer.status})`
-                  }
-                >
-                  <StatusDot $status={viewer.status} />
-                  <ViewerFilterName>{viewer.displayName}</ViewerFilterName>
-                </ViewerChip>
+              <option value="">All viewers</option>
+              {allViewers.map((viewer) => (
+                <option key={viewer.userId} value={viewer.userId}>
+                  {viewer.displayName}
+                </option>
               ))}
-              {allViewers.length > 8 && (
-                <ViewerChip
-                  $active={false}
-                  $status="away"
-                  style={{ cursor: "default", opacity: 0.7 }}
-                  title={`+${allViewers.length - 8} more viewers (use dropdown)`}
-                >
-                  +{allViewers.length - 8} more
-                </ViewerChip>
-              )}
-            </ViewerFilterChips>
+            </CompactFormSelect>
+          </ViewerFilterGroup>
+          {canAdd && (
+            <RightControls>
+              {operatorModeToggle}
+              {addPuzzleButton}
+            </RightControls>
           )}
-        </FormGroup>
-        {addPuzzleContent}
-        <SearchFormGroup
-          $canAdd={canAdd}
-          controlId={`${idPrefix}-puzzle-search`}
-        >
-          <SearchFormLabel $canAdd={canAdd}>Search</SearchFormLabel>
-          <InputGroup>
-            <FormControl
-              as="input"
-              type="text"
-              ref={searchBarRef}
-              placeholder="Filter by title, answer, or tag"
-              value={searchString}
-              onChange={onSearchStringChange}
-            />
-            <Button variant="secondary" onClick={clearSearch}>
-              <FontAwesomeIcon icon={faEraser} />
-            </Button>
-          </InputGroup>
-        </SearchFormGroup>
+        </BottomRow>
       </ViewControls>
+      </FiltersContainer>
       {renderList(
         retainedPuzzles,
         retainedDeletedPuzzles,

@@ -28,12 +28,12 @@ import RelatedPuzzleTable from "./RelatedPuzzleTable";
 const RemoveTagButton: FC<ComponentPropsWithRef<typeof Button>> = styled(
   Button,
 )`
-  height: 16px;
-  width: 16px;
-  line-height: 10px;
-  font-size: 10px;
+  height: 14px;
+  width: 14px;
+  line-height: 8px;
+  font-size: 9px;
   padding: 0;
-  margin: 0 0 0 6px;
+  margin: 0 0 0 4px;
 `;
 
 // Applying display:flex directly to popover-header leads to incorrect vertical sizing when the
@@ -76,10 +76,11 @@ const TagDiv = styled.div<{
 }>`
   display: inline-flex;
   align-items: center;
-  line-height: 24px;
-  margin: 2px 4px 2px 0;
-  padding: 0 6px;
-  border-radius: 4px;
+  line-height: 20px;
+  margin: 1px 3px 1px 0;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 0.8125rem;
   background-color: #ddd;
   color: #000;
   ${({ $popoverCapable }) =>
