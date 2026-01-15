@@ -12,6 +12,7 @@ export type SubscriberType = {
   user: string;
   visible?: boolean;
   updatedAt?: Date;
+  displayName?: string;
 };
 
 export const SubscriberCounters = new Mongo.Collection<SubscriberCounterType>(

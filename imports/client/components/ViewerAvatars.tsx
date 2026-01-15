@@ -1,7 +1,6 @@
 import { useTracker } from "meteor/react-meteor-data";
 import { useMemo } from "react";
 import styled from "styled-components";
-import MeteorUsers from "../../lib/models/MeteorUsers";
 import { Subscribers } from "../subscribers";
 
 const ViewerContainer = styled.div`
@@ -116,7 +115,6 @@ const ViewerAvatars = ({
     const subscribers = Subscribers.find({ name: subscribersTopic }).fetch();
 
     return subscribers.map((sub) => {
-      const user = MeteorUsers.findOne(sub.user);
       const now = Date.now();
       const lastSeen = sub.updatedAt ? now - sub.updatedAt.getTime() : Infinity;
 
@@ -131,9 +129,8 @@ const ViewerAvatars = ({
 
       return {
         userId: sub.user,
-        displayName: user?.displayName || "Unknown",
-        googleProfilePicture: user?.googleProfilePicture,
-        discordAccount: user?.discordAccount,
+        // Use displayName from subscription (denormalized) to avoid N+1 queries
+        displayName: sub.displayName || "Unknown",
         status,
         lastSeen,
         visible: sub.visible || false,

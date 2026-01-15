@@ -2045,6 +2045,11 @@ const PuzzlePage = React.memo(() => {
     window.document.visibilityState,
   );
 
+  // Throttled version of visibility state for subscriber updates
+  // This prevents update storms when users rapidly switch tabs
+  const [throttledIsVisible, setThrottledIsVisible] =
+    useState<DocumentVisibilityState>(window.document.visibilityState);
+
   useEffect(() => {
     const handleVisibilityChange = () => {
       setIsVisible(window.document.visibilityState);
@@ -2063,12 +2068,28 @@ const PuzzlePage = React.memo(() => {
     };
   }, []);
 
+  // Throttle visibility updates to max once per 5 seconds to reduce server load
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setThrottledIsVisible(isVisible);
+    }, 5000);
+
+    // If visibility becomes "visible", update immediately for better UX
+    // But throttle "hidden" updates since they're less time-sensitive
+    if (isVisible === "visible" && throttledIsVisible !== "visible") {
+      setThrottledIsVisible(isVisible);
+      clearTimeout(timer);
+    }
+
+    return () => clearTimeout(timer);
+  }, [isVisible, throttledIsVisible]);
+
   // Add the current user to the collection of people viewing this puzzle.
   const subscribersTopic = `puzzle:${puzzleId}`;
   useSubscribe("subscribers.inc", subscribersTopic, {
     puzzle: puzzleId,
     hunt: huntId,
-    visible: isVisible,
+    visible: throttledIsVisible,
   });
 
   // Get the _list_ of subscribers to this puzzle and the _count_ of subscribers
