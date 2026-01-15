@@ -207,9 +207,13 @@ async function fetchDriveActivity() {
               // Exclude edits made by the server drive user, since these aren't actual user edits.
               if (!credential?.value?.id || credential?.value?.id !== actorId) {
                 acc.add(actorId);
-                Logger.info("Found valid actor", { actorId: actorId.substring(0, 10) + "..." });
+                Logger.info("Found valid actor", {
+                  actorId: actorId.substring(0, 10) + "...",
+                });
               } else {
-                Logger.info("Skipping service account actor", { actorId: actorId.substring(0, 10) + "..." });
+                Logger.info("Skipping service account actor", {
+                  actorId: actorId.substring(0, 10) + "...",
+                });
               }
             } else {
               Logger.warn("Actor without personName", {
@@ -264,6 +268,9 @@ async function featureFlagChanged() {
 }
 
 async function fetchActivityLoop() {
+  let consecutiveErrors = 0;
+  const MAX_BACKOFF_MS = 60 * 1000; // Max 1 minute backoff
+
   while (true) {
     try {
       // Loop until the feature flag is disabled (i.e. the disabler is not
@@ -301,9 +308,14 @@ async function fetchActivityLoop() {
 
           await fetchDriveActivity();
 
-          // Wake up every 5 seconds (+/- 1 second of jitter)
+          // Reset error counter on successful fetch
+          consecutiveErrors = 0;
+
+          // PERFORMANCE: Increased from 5s to 15s polling interval to reduce API load
+          // Wake up every 15 seconds (+/- 5 seconds of jitter)
+          // This is still responsive enough for real-time activity tracking
           const sleep = await setTimeout(
-            4 * 1000 + Math.random() * 2 * 1000,
+            10 * 1000 + Math.random() * 10 * 1000,
           ).then(() => false);
           const renewalFailed = await Promise.race([sleep, renewalFailure]);
           if (renewalFailed) {
@@ -314,9 +326,18 @@ async function fetchActivityLoop() {
       });
       Logger.info("Exited withLock, will try to re-acquire");
     } catch (error) {
-      Logger.error("Error fetching drive activity", { error });
-      // Sleep for 5 seconds before retrying
-      await setTimeout(5000);
+      consecutiveErrors++;
+      // Exponential backoff: 5s, 10s, 20s, 40s, up to MAX_BACKOFF_MS
+      const backoffMs = Math.min(
+        5000 * 2 ** (consecutiveErrors - 1),
+        MAX_BACKOFF_MS,
+      );
+      Logger.error("Error fetching drive activity", {
+        error,
+        consecutiveErrors,
+        backoffMs,
+      });
+      await setTimeout(backoffMs);
     }
   }
 }

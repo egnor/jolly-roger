@@ -213,7 +213,9 @@ const SearchInputGroup = styled(InputGroup)`
   }
 `;
 
-const ViewerFilterChips = styled.div`
+// Unused but kept for potential future use
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _ViewerFilterChips = styled.div`
   display: flex;
   flex-wrap: wrap;
   gap: 0.25rem;
@@ -226,7 +228,8 @@ const CompactFormSelect = styled(FormSelect)`
   min-width: 150px;
 `;
 
-const ViewerChip = styled.span<{
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _ViewerChip = styled.span<{
   $active: boolean;
   $status: "active" | "idle" | "away";
 }>`
@@ -250,6 +253,7 @@ const ViewerChip = styled.span<{
         case "idle":
           return "#ffc107"; // Solid yellow
         case "away":
+        default:
           return "#6c757d"; // Solid grey
       }
     }
@@ -291,6 +295,7 @@ const ViewerChip = styled.span<{
           case "idle":
             return "#d39e00";
           case "away":
+          default:
             return "#545b62";
         }
       }
@@ -318,7 +323,8 @@ const ViewerChip = styled.span<{
   }
 `;
 
-const StatusDot = styled.span<{ $status: "active" | "idle" | "away" }>`
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _StatusDot = styled.span<{ $status: "active" | "idle" | "away" }>`
   display: inline-block;
   width: 7px;
   height: 7px;
@@ -338,7 +344,8 @@ const StatusDot = styled.span<{ $status: "active" | "idle" | "away" }>`
   }};
 `;
 
-const ViewerFilterName = styled.span`
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _ViewerFilterName = styled.span`
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -347,7 +354,8 @@ const ViewerFilterName = styled.span`
   flex-shrink: 1;
 `;
 
-const OperatorActionsFormGroup = styled(FormGroup)`
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _OperatorActionsFormGroup = styled(FormGroup)`
   ${mediaBreakpointDown(
     "xs",
     css`
@@ -356,7 +364,8 @@ const OperatorActionsFormGroup = styled(FormGroup)`
   )}
 `;
 
-const AddPuzzleFormGroup = styled(FormGroup)`
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _AddPuzzleFormGroup = styled(FormGroup)`
   justify-self: end;
   ${mediaBreakpointDown(
     "xs",
@@ -505,7 +514,9 @@ const PuzzleListView = ({
 
   const allGroupsExpanded =
     displayMode === "group" &&
-    Object.values(huntPuzzleListCollapseGroups).every((collapsed) => !collapsed);
+    Object.values(huntPuzzleListCollapseGroups).every(
+      (collapsed) => !collapsed,
+    );
 
   const [operatorActionsHidden, setOperatorActionsHidden] =
     useOperatorActionsHiddenForHunt(huntId);
@@ -599,6 +610,7 @@ const PuzzleListView = ({
 
   // Get all unique viewers across all puzzles
   // Filter to only include users who have been active in the last 30 minutes
+  // OPTIMIZED: Fetch all subscribers once, then aggregate in memory
   const allViewers = useTracker(() => {
     const viewersMap = new Map<
       string,
@@ -612,44 +624,74 @@ const PuzzleListView = ({
     const now = Date.now();
     const thirtyMinutesAgo = now - 30 * 60 * 1000; // 30 minutes in ms
 
-    allPuzzles.forEach((puzzle) => {
-      const subscribersTopic = `puzzle:${puzzle._id}`;
-      const subscribers = Subscribers.find({ name: subscribersTopic }).fetch();
-      subscribers.forEach((sub) => {
-        // Only include users who are visible OR were active in last 30 min
-        const lastSeen = sub.updatedAt ? sub.updatedAt.getTime() : 0;
-        const isRecentlyActive = sub.visible || lastSeen > thirtyMinutesAgo;
+    // Build set of puzzle topics to filter subscribers
+    const puzzleTopics = new Set(
+      allPuzzles.map((puzzle) => `puzzle:${puzzle._id}`),
+    );
 
-        if (isRecentlyActive) {
-          const user = MeteorUsers.findOne(sub.user);
-          if (user?.displayName) {
-            // Determine status based on visibility and time
-            const isActive = sub.visible || now - lastSeen < 60000; // < 1 min
-            const isIdle = !isActive && now - lastSeen < 300000; // 1-5 min
-            const status: "active" | "idle" | "away" = isActive
-              ? "active"
-              : isIdle
-                ? "idle"
-                : "away";
+    // Fetch ALL subscribers for this hunt's puzzles in ONE query
+    // This is much faster than N queries (one per puzzle)
+    const allSubscribers = Subscribers.find({}).fetch();
 
-            // Update or add viewer (keep most active status across puzzles)
-            const existing = viewersMap.get(sub.user);
-            if (!existing || lastSeen > existing.mostRecentActivity) {
-              viewersMap.set(sub.user, {
-                userId: sub.user,
-                displayName: user.displayName,
-                status,
-                mostRecentActivity: lastSeen,
-              });
-            }
+    // Filter to only subscribers for puzzles in this hunt
+    const relevantSubscribers = allSubscribers.filter((sub) =>
+      puzzleTopics.has(sub.name),
+    );
+
+    relevantSubscribers.forEach((sub) => {
+      // Only include users who are visible OR were active in last 30 min
+      const lastSeen = sub.updatedAt ? sub.updatedAt.getTime() : 0;
+      const isRecentlyActive = sub.visible || lastSeen > thirtyMinutesAgo;
+
+      if (isRecentlyActive) {
+        const user = MeteorUsers.findOne(sub.user);
+        if (user?.displayName) {
+          // Determine status based on visibility and time
+          const isActive = sub.visible || now - lastSeen < 60000; // < 1 min
+          const isIdle = !isActive && now - lastSeen < 300000; // 1-5 min
+          const status: "active" | "idle" | "away" = isActive
+            ? "active"
+            : isIdle
+              ? "idle"
+              : "away";
+
+          // Update or add viewer (keep most active status across puzzles)
+          const existing = viewersMap.get(sub.user);
+          if (!existing || lastSeen > existing.mostRecentActivity) {
+            viewersMap.set(sub.user, {
+              userId: sub.user,
+              displayName: user.displayName,
+              status,
+              mostRecentActivity: lastSeen,
+            });
           }
         }
-      });
+      }
     });
+
     return Array.from(viewersMap.values()).sort((a, b) =>
       a.displayName.localeCompare(b.displayName),
     );
   }, [allPuzzles]);
+
+  // OPTIMIZED: Build a lookup map of puzzle->viewers to avoid repeated queries
+  const puzzleViewersMap = useTracker(() => {
+    const map = new Map<string, Set<string>>();
+    const allSubscribers = Subscribers.find({}).fetch();
+
+    allSubscribers.forEach((sub) => {
+      // Extract puzzle ID from topic name like "puzzle:abc123"
+      if (sub.name.startsWith("puzzle:")) {
+        const puzzleId = sub.name.substring("puzzle:".length);
+        if (!map.has(puzzleId)) {
+          map.set(puzzleId, new Set());
+        }
+        map.get(puzzleId)!.add(sub.user);
+      }
+    });
+
+    return map;
+  }, []);
 
   const puzzlesMatchingViewerFilter = useCallback(
     (puzzles: PuzzleType[]): PuzzleType[] => {
@@ -657,14 +699,11 @@ const PuzzleListView = ({
         return puzzles;
       }
       return puzzles.filter((puzzle) => {
-        const subscribersTopic = `puzzle:${puzzle._id}`;
-        const subscribers = Subscribers.find({
-          name: subscribersTopic,
-        }).fetch();
-        return subscribers.some((sub) => sub.user === viewerFilter);
+        const viewers = puzzleViewersMap.get(puzzle._id);
+        return viewers?.has(viewerFilter) || false;
       });
     },
-    [viewerFilter],
+    [viewerFilter, puzzleViewersMap],
   );
 
   const puzzlesMatchingSolvedFilter = useCallback(
@@ -915,107 +954,107 @@ const PuzzleListView = ({
       <FiltersContainer>
         <SectionHeader>Filters</SectionHeader>
         <ViewControls>
-        <TopRow>
-          <SearchContainer>
-            <SearchFormGroup controlId={`${idPrefix}-puzzle-search`}>
-              <SearchFormLabel>Search</SearchFormLabel>
-              <SearchInputGroup>
-                <FormControl
-                  as="input"
-                  type="text"
-                  ref={searchBarRef}
-                  placeholder="Search by name, answer, tag, etc."
-                  value={searchString}
-                  onChange={onSearchStringChange}
-                />
-                {searchString && (
-                  <ClearSearchButton
-                    type="button"
-                    onClick={clearSearch}
-                    aria-label="Clear search"
-                  >
-                    <FontAwesomeIcon icon={faCircleXmark} />
-                  </ClearSearchButton>
-                )}
-              </SearchInputGroup>
-            </SearchFormGroup>
-          </SearchContainer>
-          <ControlGroup>
-            <ControlLabel>Show:</ControlLabel>
-            <StyledToggleButtonGroup
-              type="radio"
-              name="show-solved"
-              value={showSolved ? "show" : "hide"}
-              onChange={setShowSolvedString}
-            >
-              <ToggleButton
-                id={`${idPrefix}-solved-show-button`}
-                variant="outline-secondary"
-                value="show"
-                size="sm"
+          <TopRow>
+            <SearchContainer>
+              <SearchFormGroup controlId={`${idPrefix}-puzzle-search`}>
+                <SearchFormLabel>Search</SearchFormLabel>
+                <SearchInputGroup>
+                  <FormControl
+                    as="input"
+                    type="text"
+                    ref={searchBarRef}
+                    placeholder="Search by name, answer, tag, etc."
+                    value={searchString}
+                    onChange={onSearchStringChange}
+                  />
+                  {searchString && (
+                    <ClearSearchButton
+                      type="button"
+                      onClick={clearSearch}
+                      aria-label="Clear search"
+                    >
+                      <FontAwesomeIcon icon={faCircleXmark} />
+                    </ClearSearchButton>
+                  )}
+                </SearchInputGroup>
+              </SearchFormGroup>
+            </SearchContainer>
+            <ControlGroup>
+              <ControlLabel>Show:</ControlLabel>
+              <StyledToggleButtonGroup
+                type="radio"
+                name="show-solved"
+                value={showSolved ? "show" : "hide"}
+                onChange={setShowSolvedString}
               >
-                All
-              </ToggleButton>
-              <ToggleButton
-                id={`${idPrefix}-solved-hide-button`}
-                variant="outline-secondary"
-                value="hide"
-                size="sm"
+                <ToggleButton
+                  id={`${idPrefix}-solved-show-button`}
+                  variant="outline-secondary"
+                  value="show"
+                  size="sm"
+                >
+                  All
+                </ToggleButton>
+                <ToggleButton
+                  id={`${idPrefix}-solved-hide-button`}
+                  variant="outline-secondary"
+                  value="hide"
+                  size="sm"
+                >
+                  Unsolved
+                </ToggleButton>
+              </StyledToggleButtonGroup>
+            </ControlGroup>
+            <ControlGroup>
+              <ControlLabel>Organize by:</ControlLabel>
+              <StyledToggleButtonGroup
+                type="radio"
+                name="puzzle-view"
+                value={displayMode}
+                onChange={setDisplayMode}
               >
-                Unsolved
-              </ToggleButton>
-            </StyledToggleButtonGroup>
-          </ControlGroup>
-          <ControlGroup>
-            <ControlLabel>Organize by:</ControlLabel>
-            <StyledToggleButtonGroup
-              type="radio"
-              name="puzzle-view"
-              value={displayMode}
-              onChange={setDisplayMode}
-            >
-              <ToggleButton
-                id={`${idPrefix}-view-group-button`}
-                variant="outline-secondary"
-                value="group"
-                size="sm"
+                <ToggleButton
+                  id={`${idPrefix}-view-group-button`}
+                  variant="outline-secondary"
+                  value="group"
+                  size="sm"
+                >
+                  Group
+                </ToggleButton>
+                <ToggleButton
+                  id={`${idPrefix}-view-unlock-button`}
+                  variant="outline-secondary"
+                  value="unlock"
+                  size="sm"
+                >
+                  Unlock
+                </ToggleButton>
+              </StyledToggleButtonGroup>
+            </ControlGroup>
+          </TopRow>
+          <BottomRow>
+            <ViewerFilterGroup>
+              <ControlLabel>Filter by:</ControlLabel>
+              <CompactFormSelect
+                value={viewerFilter}
+                onChange={(e) => setViewerFilter(e.target.value)}
               >
-                Group
-              </ToggleButton>
-              <ToggleButton
-                id={`${idPrefix}-view-unlock-button`}
-                variant="outline-secondary"
-                value="unlock"
-                size="sm"
-              >
-                Unlock
-              </ToggleButton>
-            </StyledToggleButtonGroup>
-          </ControlGroup>
-        </TopRow>
-        <BottomRow>
-          <ViewerFilterGroup>
-            <ControlLabel>Filter by:</ControlLabel>
-            <CompactFormSelect
-              value={viewerFilter}
-              onChange={(e) => setViewerFilter(e.target.value)}
-            >
-              <option value="">All viewers</option>
-              {allViewers.map((viewer) => (
-                <option key={viewer.userId} value={viewer.userId}>
-                  {viewer.displayName}
-                </option>
-              ))}
-            </CompactFormSelect>
-          </ViewerFilterGroup>
-          {canAdd && (
-            <RightControls>
-              {operatorModeToggle}
-              {addPuzzleButton}
-            </RightControls>
-          )}
-        </BottomRow>
-      </ViewControls>
+                <option value="">All viewers</option>
+                {allViewers.map((viewer) => (
+                  <option key={viewer.userId} value={viewer.userId}>
+                    {viewer.displayName}
+                  </option>
+                ))}
+              </CompactFormSelect>
+            </ViewerFilterGroup>
+            {canAdd && (
+              <RightControls>
+                {operatorModeToggle}
+                {addPuzzleButton}
+              </RightControls>
+            )}
+          </BottomRow>
+        </ViewControls>
       </FiltersContainer>
       {renderList(
         retainedPuzzles,

@@ -18,6 +18,25 @@ const openai = process.env.OPENAI_API_KEY
   ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
   : null;
 
+// Rate limiting for /summary command to prevent abuse and control costs
+// Key format: "puzzleId:userId" -> timestamp of last request
+const summaryRateLimitCache = new Map<string, number>();
+const SUMMARY_RATE_LIMIT_MS = 5 * 60 * 1000; // 5 minutes
+
+// Clean up old entries periodically (every 10 minutes)
+setInterval(
+  () => {
+    const now = Date.now();
+    const cutoff = now - SUMMARY_RATE_LIMIT_MS * 2; // Keep entries for 2x the rate limit
+    for (const [key, timestamp] of summaryRateLimitCache.entries()) {
+      if (timestamp < cutoff) {
+        summaryRateLimitCache.delete(key);
+      }
+    }
+  },
+  10 * 60 * 1000,
+);
+
 interface CommandHandler {
   // Returns true if the command was handled, false otherwise
   handle: (chatMessage: ChatMessageType, args: string) => Promise<boolean>;
@@ -95,6 +114,7 @@ const debugCommand: CommandHandler = {
 
       // Fetch recent chat messages (last 10) - include ALL non-deleted messages
       // Note: SoftDeletedModel automatically filters out deleted: true
+      // PERFORMANCE: Limit to prevent unbounded queries on long-running puzzles
       const allMessages = await ChatMessages.find(
         {
           puzzle: chatMessage.puzzle,
@@ -177,12 +197,19 @@ const usersCommand: CommandHandler = {
       }
 
       // Get all users who have sent chat messages
-      const chatMessages = await ChatMessages.find({
-        puzzle: chatMessage.puzzle,
-        hunt: puzzle.hunt,
-        sender: { $exists: true }, // Only messages with a sender (not system messages)
-        recipient: { $exists: false }, // Only public messages
-      }).fetchAsync();
+      // PERFORMANCE: Limit to last 5000 messages to prevent unbounded queries
+      const chatMessages = await ChatMessages.find(
+        {
+          puzzle: chatMessage.puzzle,
+          hunt: puzzle.hunt,
+          sender: { $exists: true }, // Only messages with a sender (not system messages)
+          recipient: { $exists: false }, // Only public messages
+        },
+        {
+          sort: { timestamp: -1 },
+          limit: 5000,
+        },
+      ).fetchAsync();
 
       // Count messages per user
       const chatActivity = new Map<string, number>();
@@ -201,12 +228,19 @@ const usersCommand: CommandHandler = {
       // Get document activity for all documents
       // Note: DocumentActivities records are time-bucketed (5 min in prod, 5 sec in dev)
       // representing periods of active editing, not discrete edit events
+      // PERFORMANCE: Limit to last 2000 activity records per document
       const docActivity = new Map<string, number>();
       for (const doc of documents) {
-        const activities = await DocumentActivities.find({
-          document: doc._id,
-          user: { $exists: true },
-        }).fetchAsync();
+        const activities = await DocumentActivities.find(
+          {
+            document: doc._id,
+            user: { $exists: true },
+          },
+          {
+            sort: { ts: -1 },
+            limit: 2000,
+          },
+        ).fetchAsync();
 
         for (const activity of activities) {
           if (activity.user) {
@@ -221,10 +255,17 @@ const usersCommand: CommandHandler = {
       // Get call activity (speaking time) for this puzzle
       // Note: CallActivities records are created when users actively speak,
       // not just when they're connected. Each record represents ~1 second of speaking.
-      const callActivities = await CallActivities.find({
-        call: chatMessage.puzzle, // puzzle ID is used as call ID
-        user: { $exists: true },
-      }).fetchAsync();
+      // PERFORMANCE: Limit to last 10000 records (roughly 3 hours of continuous speaking)
+      const callActivities = await CallActivities.find(
+        {
+          call: chatMessage.puzzle, // puzzle ID is used as call ID
+          user: { $exists: true },
+        },
+        {
+          sort: { ts: -1 },
+          limit: 10000,
+        },
+      ).fetchAsync();
 
       // Count speaking time per user (each activity record ~ 1 second of speaking)
       const callActivity = new Map<string, number>();
@@ -371,13 +412,20 @@ const recentCommand: CommandHandler = {
       const recentThreshold = new Date(Date.now() - 30 * 60 * 1000);
 
       // Get recent chat messages
-      const chatMessages = await ChatMessages.find({
-        puzzle: chatMessage.puzzle,
-        hunt: puzzle.hunt,
-        sender: { $exists: true },
-        recipient: { $exists: false },
-        timestamp: { $gte: recentThreshold },
-      }).fetchAsync();
+      // PERFORMANCE: Add limit as safety net (30 min shouldn't exceed 1000 messages)
+      const chatMessages = await ChatMessages.find(
+        {
+          puzzle: chatMessage.puzzle,
+          hunt: puzzle.hunt,
+          sender: { $exists: true },
+          recipient: { $exists: false },
+          timestamp: { $gte: recentThreshold },
+        },
+        {
+          sort: { timestamp: -1 },
+          limit: 1000,
+        },
+      ).fetchAsync();
 
       // Count messages per user
       const chatActivityRecent = new Map<string, number>();
@@ -397,13 +445,20 @@ const recentCommand: CommandHandler = {
       }).fetchAsync();
 
       // Get recent document activity
+      // PERFORMANCE: Add limit as safety net
       const docActivityRecent = new Map<string, number>();
       for (const doc of documents) {
-        const activities = await DocumentActivities.find({
-          document: doc._id,
-          user: { $exists: true },
-          ts: { $gte: recentThreshold },
-        }).fetchAsync();
+        const activities = await DocumentActivities.find(
+          {
+            document: doc._id,
+            user: { $exists: true },
+            ts: { $gte: recentThreshold },
+          },
+          {
+            sort: { ts: -1 },
+            limit: 500,
+          },
+        ).fetchAsync();
 
         for (const activity of activities) {
           if (activity.user) {
@@ -416,11 +471,18 @@ const recentCommand: CommandHandler = {
       }
 
       // Get recent call activity
-      const callActivities = await CallActivities.find({
-        call: chatMessage.puzzle,
-        user: { $exists: true },
-        ts: { $gte: recentThreshold },
-      }).fetchAsync();
+      // PERFORMANCE: Add limit as safety net (30 min shouldn't exceed 2000 records)
+      const callActivities = await CallActivities.find(
+        {
+          call: chatMessage.puzzle,
+          user: { $exists: true },
+          ts: { $gte: recentThreshold },
+        },
+        {
+          sort: { ts: -1 },
+          limit: 2000,
+        },
+      ).fetchAsync();
 
       // Count speaking time per user
       const callActivityRecent = new Map<string, number>();
@@ -562,6 +624,29 @@ const summaryCommand: CommandHandler = {
       });
       return true;
     }
+
+    // Rate limiting: max 1 summary per user per puzzle per 5 minutes
+    const rateLimitKey = `${chatMessage.puzzle}:${chatMessage.sender}`;
+    const now = Date.now();
+    const lastRequest = summaryRateLimitCache.get(rateLimitKey);
+
+    if (lastRequest && now - lastRequest < SUMMARY_RATE_LIMIT_MS) {
+      const waitTime = Math.ceil(
+        (SUMMARY_RATE_LIMIT_MS - (now - lastRequest)) / 1000,
+      );
+      await sendChatMessageInternal({
+        puzzleId: chatMessage.puzzle,
+        content: contentFromMessage(
+          `⏱️ Please wait ${waitTime} seconds before requesting another summary for this puzzle.`,
+        ),
+        sender: undefined,
+        recipient: chatMessage.sender,
+      });
+      return true;
+    }
+
+    // Update rate limit cache
+    summaryRateLimitCache.set(rateLimitKey, now);
 
     try {
       // Send "working on it" message (private to requester)
