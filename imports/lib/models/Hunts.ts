@@ -49,6 +49,8 @@ const EditableHunt = z.object({
   // If provided, then members of the hunt who have also linked their Discord
   // profile will be added to this role.
   memberDiscordRole: SavedDiscordObjectFields.optional(),
+  // If true, AI-generated hunt summaries are available for this hunt
+  aiSummaryEnabled: z.boolean().default(false),
 });
 export type EditableHuntType = z.infer<typeof EditableHunt>;
 const Hunt = withCommon(EditableHunt);
@@ -71,6 +73,7 @@ export const HuntPattern = {
   puzzleHooksDiscordChannel: Match.Optional(SavedDiscordObjectPattern),
   firehoseDiscordChannel: Match.Optional(SavedDiscordObjectPattern),
   memberDiscordRole: Match.Optional(SavedDiscordObjectPattern),
+  aiSummaryEnabled: Boolean,
 };
 
 const Hunts = new SoftDeletedModel("jr_hunts", Hunt);

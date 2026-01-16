@@ -3,6 +3,7 @@ import { useTracker } from "meteor/react-meteor-data";
 import { faCaretDown } from "@fortawesome/free-solid-svg-icons/faCaretDown";
 import { faCaretRight } from "@fortawesome/free-solid-svg-icons/faCaretRight";
 import { faCircleXmark } from "@fortawesome/free-solid-svg-icons/faCircleXmark";
+import { faMagicWandSparkles } from "@fortawesome/free-solid-svg-icons/faMagicWandSparkles";
 import { faPlus } from "@fortawesome/free-solid-svg-icons/faPlus";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
@@ -54,6 +55,9 @@ import useTypedSubscribe from "../hooks/useTypedSubscribe";
 import { compilePuzzleMatcher } from "../search";
 import { Subscribers } from "../subscribers";
 import HuntNav from "./HuntNav";
+import HuntSummaryModal, {
+  type HuntSummaryModalHandle,
+} from "./HuntSummaryModal";
 import PuzzleList from "./PuzzleList";
 import type {
   PuzzleModalFormHandle,
@@ -481,11 +485,13 @@ const HuntNavWrapper = styled.div`
 
 const PuzzleListView = ({
   huntId,
+  hunt,
   canAdd,
   canUpdate,
   loading,
 }: {
   huntId: string;
+  hunt: ReturnType<typeof Hunts.findOne>;
   canAdd: boolean;
   canUpdate: boolean;
   loading: boolean;
@@ -557,6 +563,7 @@ const PuzzleListView = ({
   const searchString = searchParams.get("q") ?? "";
   const viewerFilter = searchParams.get("viewer") ?? "";
   const addModalRef = useRef<PuzzleModalFormHandle>(null);
+  const summaryModalRef = useRef<HuntSummaryModalHandle>(null);
   const searchBarRef = useRef<HTMLInputElement>(null);
   const [displayMode, setDisplayMode] = useHuntPuzzleListDisplayMode(huntId);
   const [showSolved, setShowSolved] = useHuntPuzzleListShowSolved(huntId);
@@ -804,6 +811,12 @@ const PuzzleListView = ({
     }
   }, []);
 
+  const showSummaryModal = useCallback(() => {
+    if (summaryModalRef.current) {
+      summaryModalRef.current.show();
+    }
+  }, []);
+
   const renderList = useCallback(
     (
       retainedPuzzles: PuzzleType[],
@@ -982,6 +995,12 @@ const PuzzleListView = ({
     </ControlGroup>
   );
 
+  const huntSummaryButton = hunt?.aiSummaryEnabled && (
+    <StyledButton variant="info" onClick={showSummaryModal} size="sm">
+      <FontAwesomeIcon icon={faMagicWandSparkles} /> Hunt Summary
+    </StyledButton>
+  );
+
   const addPuzzleButton = canAdd && (
     <StyledButton variant="primary" onClick={showAddModal} size="sm">
       <FontAwesomeIcon icon={faPlus} /> Add puzzle
@@ -1016,6 +1035,9 @@ const PuzzleListView = ({
           onSubmit={onAdd}
         />
       )}
+      {hunt?.aiSummaryEnabled && (
+        <HuntSummaryModal huntId={huntId} ref={summaryModalRef} />
+      )}
       <StatsAndActionsBar>
         <StatsText>
           <span>
@@ -1026,9 +1048,10 @@ const PuzzleListView = ({
             {huntStats.puzzlesTotal}
           </span>
         </StatsText>
-        {canAdd && (
+        {(canAdd || hunt?.aiSummaryEnabled) && (
           <ActionsGroup>
             {operatorModeToggle}
+            {huntSummaryButton}
             {addPuzzleButton}
           </ActionsGroup>
         )}
@@ -1175,6 +1198,7 @@ const PuzzleListPage = () => {
 
       <PuzzleListView
         huntId={huntId}
+        hunt={hunt}
         canAdd={canAdd}
         canUpdate={canUpdate}
         loading={loading}

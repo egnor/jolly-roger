@@ -253,6 +253,9 @@ const HuntEditPage = () => {
   const [memberDiscordRole, setMemberDiscordRole] = useState<
     SavedDiscordObjectType | undefined
   >(hunt?.memberDiscordRole);
+  const [aiSummaryEnabled, setAiSummaryEnabled] = useState<boolean>(
+    hunt?.aiSummaryEnabled ?? false
+  );
 
   const onNameChanged = useCallback<NonNullable<FormControlProps["onChange"]>>(
     (e) => {
@@ -374,6 +377,7 @@ const HuntEditPage = () => {
         puzzleHooksDiscordChannel,
         firehoseDiscordChannel,
         memberDiscordRole,
+        aiSummaryEnabled,
       };
 
       if (huntId) {
@@ -396,6 +400,7 @@ const HuntEditPage = () => {
       puzzleHooksDiscordChannel,
       firehoseDiscordChannel,
       memberDiscordRole,
+      aiSummaryEnabled,
       onFormCallback,
     ],
   );
@@ -741,6 +746,29 @@ const HuntEditPage = () => {
             Discord has not been configured, so Discord settings are disabled.
           </Alert>
         )}
+
+        <FormGroup
+          as={Row}
+          className="mb-3"
+          controlId={`${idPrefix}-hunt-form-ai-summary`}
+        >
+          <FormLabel column xs={3}>
+            AI Hunt Summaries
+          </FormLabel>
+          <Col xs={9}>
+            <FormCheck
+              type="checkbox"
+              label="Enable AI-generated hunt summaries"
+              checked={aiSummaryEnabled}
+              onChange={(e) => setAiSummaryEnabled(e.target.checked)}
+              disabled={disableForm}
+            />
+            <FormText>
+              When enabled, users can generate AI summaries of hunt progress.
+              Requires OPENAI_API_KEY or ANTHROPIC_API_KEY environment variable.
+            </FormText>
+          </Col>
+        </FormGroup>
 
         <div ref={footer}>
           {submitState === SubmitState.FAILED && (
