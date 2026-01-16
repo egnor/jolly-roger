@@ -41,6 +41,41 @@ const StyledCodeBlock = styled.code`
   margin-bottom: 0;
 `;
 
+const StyledHeading1 = styled.h1`
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+`;
+
+const StyledHeading2 = styled.h2`
+  font-size: 1.3rem;
+  font-weight: 600;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+`;
+
+const StyledHeading3 = styled.h3`
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+`;
+
+const StyledList = styled.ul`
+  margin-bottom: 0.5rem;
+  padding-left: 1.5rem;
+`;
+
+const StyledOrderedList = styled.ol`
+  margin-bottom: 0.5rem;
+  padding-left: 1.5rem;
+`;
+
+const StyledListItem = styled.li`
+  margin-bottom: 0.25rem;
+`;
+
 const ResponsiveImage = ({
   src,
   onLoadCB,
@@ -188,12 +223,34 @@ const MarkdownToken = ({
   } else if (token.type === "code") {
     // Text in code blocks is _not_ encoded, so pass it through as is.
     return <StyledCodeBlock>{token.text}</StyledCodeBlock>;
+  } else if (token.type === "heading") {
+    const headingToken = token as Tokens.Heading;
+    const children = headingToken.tokens.map((t, i) => (
+      <MarkdownToken key={i} token={t} />
+    ));
+    if (headingToken.depth === 1) {
+      return <StyledHeading1>{children}</StyledHeading1>;
+    } else if (headingToken.depth === 2) {
+      return <StyledHeading2>{children}</StyledHeading2>;
+    } else {
+      return <StyledHeading3>{children}</StyledHeading3>;
+    }
+  } else if (token.type === "list") {
+    const listToken = token as Tokens.List;
+    const children = listToken.items.map((item, i) => (
+      <StyledListItem key={i}>
+        {item.tokens.map((t, j) => (
+          <MarkdownToken key={j} token={t} />
+        ))}
+      </StyledListItem>
+    ));
+    if (listToken.ordered) {
+      return <StyledOrderedList>{children}</StyledOrderedList>;
+    } else {
+      return <StyledList>{children}</StyledList>;
+    }
   } else {
     // Unhandled token types: just return the raw string with pre-wrap.
-    // This covers things like bulleted or numbered lists, which we explicitly
-    // do not want to render semantically because markdown does terribly
-    // surprising things with the numbers in ordered lists and only supporting
-    // unordered lists would be confusing.
     return <PreWrapSpan>{token.raw}</PreWrapSpan>;
   }
 };
