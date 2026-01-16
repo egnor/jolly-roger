@@ -10,6 +10,7 @@ import {
   type FC,
   useCallback,
   useId,
+  useMemo,
   useRef,
 } from "react";
 import Alert from "react-bootstrap/Alert";
@@ -68,6 +69,52 @@ const SectionHeader = styled.div`
   font-weight: 600;
   margin-bottom: 0.5em;
   color: ${(props) => props.theme.colors.text};
+`;
+
+const StatsAndActionsBar = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5em 0;
+  margin-bottom: 0.75em;
+  font-size: 0.875rem;
+  flex-wrap: wrap;
+  gap: 1em;
+
+  ${mediaBreakpointDown(
+    "sm",
+    css`
+      flex-direction: column;
+      align-items: flex-start;
+    `,
+  )}
+`;
+
+const StatsText = styled.div`
+  color: ${(props) => props.theme.colors.text};
+  font-weight: 500;
+
+  span {
+    margin-right: 1em;
+  }
+
+  strong {
+    font-weight: 600;
+  }
+`;
+
+const ActionsGroup = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 1em;
+
+  ${mediaBreakpointDown(
+    "sm",
+    css`
+      width: 100%;
+      justify-content: flex-start;
+    `,
+  )}
 `;
 
 const FiltersContainer = styled.div`
@@ -140,22 +187,6 @@ const BottomRow = styled.div`
   gap: 1em;
   font-size: 0.8125rem;
   flex-wrap: wrap;
-`;
-
-const RightControls = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.75em;
-  margin-left: auto;
-
-  ${mediaBreakpointDown(
-    "sm",
-    css`
-      margin-left: 0;
-      width: 100%;
-      justify-content: flex-start;
-    `,
-  )}
 `;
 
 const SearchFormGroup = styled(FormGroup)`
@@ -467,6 +498,38 @@ const PuzzleListView = ({
     () => Tags.find({ hunt: huntId }).fetch(),
     [huntId],
   );
+
+  // Calculate hunt-wide stats
+  const huntStats = useMemo(() => {
+    const allTagsById = new Map(allTags.map((t) => [t._id, t]));
+
+    // Helper function to check if a puzzle is a meta
+    const isMeta = (puzzle: PuzzleType): boolean => {
+      return puzzle.tags.some((tagId) => {
+        const tag = allTagsById.get(tagId);
+        return (
+          tag &&
+          (tag.name === "is:meta" ||
+            tag.name === "is:metameta" ||
+            tag.name.startsWith("meta-for:"))
+        );
+      });
+    };
+
+    const metas = allPuzzles.filter(isMeta);
+    const regularPuzzles = allPuzzles.filter((p) => !isMeta(p));
+
+    return {
+      metasSolved: metas.filter((p) => computeSolvedness(p) === "solved")
+        .length,
+      metasTotal: metas.length,
+      puzzlesSolved: regularPuzzles.filter(
+        (p) => computeSolvedness(p) === "solved",
+      ).length,
+      puzzlesTotal: regularPuzzles.length,
+    };
+  }, [allPuzzles, allTags]);
+
   const bookmarked = useTracker(() => {
     const bookmarks = Bookmarks.find({ hunt: huntId, user: Meteor.userId()! })
       .fetch()
@@ -610,7 +673,7 @@ const PuzzleListView = ({
 
   // Get all unique viewers across all puzzles
   // Filter to only include users who have been active in the last 30 minutes
-  // OPTIMIZED: Fetch all subscribers once, then aggregate in memory
+  // OPTIMIZED: Fetch only subscribers for this hunt's puzzles with server-side filtering
   const allViewers = useTracker(() => {
     const viewersMap = new Map<
       string,
@@ -624,19 +687,14 @@ const PuzzleListView = ({
     const now = Date.now();
     const thirtyMinutesAgo = now - 30 * 60 * 1000; // 30 minutes in ms
 
-    // Build set of puzzle topics to filter subscribers
-    const puzzleTopics = new Set(
-      allPuzzles.map((puzzle) => `puzzle:${puzzle._id}`),
-    );
+    // Build array of puzzle topics to use in MongoDB $in query
+    const puzzleTopics = allPuzzles.map((puzzle) => `puzzle:${puzzle._id}`);
 
-    // Fetch ALL subscribers for this hunt's puzzles in ONE query
-    // This is much faster than N queries (one per puzzle)
-    const allSubscribers = Subscribers.find({}).fetch();
-
-    // Filter to only subscribers for puzzles in this hunt
-    const relevantSubscribers = allSubscribers.filter((sub) =>
-      puzzleTopics.has(sub.name),
-    );
+    // Fetch ONLY subscribers for this hunt's puzzles using server-side filtering
+    // This is much faster than fetching all subscribers and filtering client-side
+    const relevantSubscribers = Subscribers.find({
+      name: { $in: puzzleTopics },
+    }).fetch();
 
     relevantSubscribers.forEach((sub) => {
       // Only include users who are visible OR were active in last 30 min
@@ -677,7 +735,14 @@ const PuzzleListView = ({
   // OPTIMIZED: Build a lookup map of puzzle->viewers to avoid repeated queries
   const puzzleViewersMap = useTracker(() => {
     const map = new Map<string, Set<string>>();
-    const allSubscribers = Subscribers.find({}).fetch();
+
+    // Build array of puzzle topics to use in MongoDB $in query
+    const puzzleTopics = allPuzzles.map((puzzle) => `puzzle:${puzzle._id}`);
+
+    // Fetch ONLY subscribers for this hunt's puzzles using server-side filtering
+    const allSubscribers = Subscribers.find({
+      name: { $in: puzzleTopics },
+    }).fetch();
 
     allSubscribers.forEach((sub) => {
       // Extract puzzle ID from topic name like "puzzle:abc123"
@@ -691,7 +756,7 @@ const PuzzleListView = ({
     });
 
     return map;
-  }, []);
+  }, [allPuzzles]);
 
   const puzzlesMatchingViewerFilter = useCallback(
     (puzzles: PuzzleType[]): PuzzleType[] => {
@@ -951,6 +1016,23 @@ const PuzzleListView = ({
           onSubmit={onAdd}
         />
       )}
+      <StatsAndActionsBar>
+        <StatsText>
+          <span>
+            <strong>Metas:</strong> {huntStats.metasSolved}/{huntStats.metasTotal}
+          </span>
+          <span>
+            <strong>Puzzles:</strong> {huntStats.puzzlesSolved}/
+            {huntStats.puzzlesTotal}
+          </span>
+        </StatsText>
+        {canAdd && (
+          <ActionsGroup>
+            {operatorModeToggle}
+            {addPuzzleButton}
+          </ActionsGroup>
+        )}
+      </StatsAndActionsBar>
       <FiltersContainer>
         <SectionHeader>Filters</SectionHeader>
         <ViewControls>
@@ -1047,12 +1129,6 @@ const PuzzleListView = ({
                 ))}
               </CompactFormSelect>
             </ViewerFilterGroup>
-            {canAdd && (
-              <RightControls>
-                {operatorModeToggle}
-                {addPuzzleButton}
-              </RightControls>
-            )}
           </BottomRow>
         </ViewControls>
       </FiltersContainer>

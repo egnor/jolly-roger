@@ -625,7 +625,7 @@ const useCallState = ({
         dispatch({ type: "set-device", device: newDevice });
       })();
     } else {
-      logger.info("Clearing Mediasoup device");
+      logger.debug("Clearing Mediasoup device");
       dispatch({ type: "set-device", device: undefined });
     }
   }, [router?._id, router?.rtpCapabilities]);

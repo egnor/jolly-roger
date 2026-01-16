@@ -361,7 +361,7 @@ const usersCommand: CommandHandler = {
         if (userData.docBuckets > 0) {
           // Note: docBuckets are time windows, not discrete edits
           // In production: ~5 min/bucket, in development: ~5 sec/bucket
-          activities.push(`📝 ~${userData.docBuckets}`);
+          activities.push(`📝 ${userData.docBuckets}`);
         }
 
         return `• **${userData.displayName}**: ${activities.join("  ")}`;
@@ -575,7 +575,7 @@ const recentCommand: CommandHandler = {
           activities.push(`📞 ${formatTime(userData.callSecondsRecent)}`);
         }
         if (userData.docBucketsRecent > 0) {
-          activities.push(`📝 ~${userData.docBucketsRecent}`);
+          activities.push(`📝 ${userData.docBucketsRecent}`);
         }
 
         return `• **${userData.displayName}**: ${activities.join("  ")}`;

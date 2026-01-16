@@ -8,6 +8,7 @@
 
 import { check, Match } from "meteor/check";
 import { Meteor } from "meteor/meteor";
+import MeteorUsers from "../lib/models/MeteorUsers";
 import { registerPeriodicCleanupHook, serverId } from "./garbage-collection";
 import Subscribers from "./models/Subscribers";
 
@@ -139,6 +140,7 @@ Meteor.publish("subscribers.fetch", async function (name) {
       count: number;
       visible: boolean;
       updatedAt: Date;
+      displayName?: string;
     }
   > = {};
 
@@ -149,26 +151,34 @@ Meteor.publish("subscribers.fetch", async function (name) {
       user: userId,
       visible: state.visible,
       updatedAt: state.updatedAt,
+      displayName: state.displayName,
     });
   };
 
   const cursor = Subscribers.find({ name });
   const handle = await cursor.observeAsync({
-    added: (doc) => {
+    added: async (doc) => {
       const { user, context, updatedAt } = doc;
       const visible = context?.visible === "visible";
 
       if (!Object.hasOwn(users, user)) {
+        // Fetch user's display name once when they first appear
+        // Note: displayName is cached for performance. Updates will be reflected
+        // when the user reconnects (new tab, page refresh, visibility change).
+        // This is acceptable since displayName changes are infrequent.
+        const meteorUser = await MeteorUsers.findOneAsync(user);
         users[user] = {
           count: 0,
           visible: false,
           updatedAt: updatedAt || new Date(),
+          displayName: meteorUser?.displayName,
         };
         this.added("subscribers", `${name}:${user}`, {
           name,
           user,
           visible: false,
           updatedAt: updatedAt || new Date(),
+          displayName: meteorUser?.displayName,
         });
       }
 
