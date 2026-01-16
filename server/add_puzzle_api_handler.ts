@@ -13,7 +13,7 @@ declare module "meteor/ddp" {
 }
 
 // Endpoint.
-WebApp.connectHandlers.use("/apiCreatePuzzle94549", (req, res, next) => {
+WebApp.connectHandlers.use("/apiCreatePuzzle94549", async (req, res, next) => {
   if (req.method === "GET") {
     const urlObject = new URL(req.url || "", `http://${req.headers.host}`);
     const queryParams = urlObject.searchParams;
@@ -27,7 +27,7 @@ WebApp.connectHandlers.use("/apiCreatePuzzle94549", (req, res, next) => {
     const docType = <GdriveMimeTypesType>"spreadsheet";
     const userId = queryParams.get("userId") || "";
 
-    const puzzle = Puzzles.findOne({ title: title });
+    const puzzle = await Puzzles.findOneAsync({ title: title });
     if (puzzle) {
       console.log(
         "tried to access puzzle '" + title + "' but it already exists",
@@ -48,8 +48,8 @@ WebApp.connectHandlers.use("/apiCreatePuzzle94549", (req, res, next) => {
     };
 
     // Call 'mymethod' within this context
-    DDP._CurrentMethodInvocation.withValue(methodInvocation, () => {
-      const result = Meteor.call("Puzzles.methods.create", payload);
+    await DDP._CurrentMethodInvocation.withValue(methodInvocation, async () => {
+      const result = await Meteor.callAsync("Puzzles.methods.create", payload);
 
       res.writeHead(200);
       res.write("Puzzle id created: " + result);
@@ -62,16 +62,17 @@ WebApp.connectHandlers.use("/apiCreatePuzzle94549", (req, res, next) => {
   }
 });
 
-WebApp.connectHandlers.use("/getAllPuzzleURLs", (req, res, next) => {
+WebApp.connectHandlers.use("/getAllPuzzleURLs", async (req, res, next) => {
   const urlObject = new URL(req.url || "", `http://${req.headers.host}`);
   const queryParams = urlObject.searchParams;
   const huntId = queryParams.get("huntId") || "";
 
   res.writeHead(200);
-  Puzzles.find({ hunt: huntId }).forEach((puzzle) => {
+  const puzzles = await Puzzles.find({ hunt: huntId }).fetchAsync();
+  for (const puzzle of puzzles) {
     if (puzzle.url) {
       res.write(puzzle.url + "\n");
     }
-  });
+  }
   res.end();
 });
